@@ -1,0 +1,32 @@
+name: Deploy Sadhana Tracker
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    name: Deploy to Fly.io
+    runs-on: ubuntu-latest
+    concurrency: deploy-group
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: superfly/flyctl-actions/setup-flyctl@master
+
+      - name: Set secrets
+        run: |
+          flyctl secrets set \
+            JWT_SECRET="${{ secrets.JWT_SECRET }}" \
+            VAPID_PUBLIC_KEY="${{ secrets.VAPID_PUBLIC_KEY }}" \
+            VAPID_PRIVATE_KEY="${{ secrets.VAPID_PRIVATE_KEY }}" \
+            --app sadhana-tracker
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}
+
+      - name: Deploy
+        run: flyctl deploy --remote-only
+        env:
+          FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN }}

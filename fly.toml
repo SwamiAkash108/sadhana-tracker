@@ -1,0 +1,21 @@
+app = "sadhana-tracker"
+primary_region = "lhr"
+
+[build]
+  buildpack = "nodejs"
+
+[env]
+  NODE_ENV = "production"
+  DATA_DIR = "/data"
+  VAPID_SUBJECT = "mailto:akashananda@bhaktimarga.org"
+  JWT_SECRET = ""  # set via fly secrets
+  VAPID_PUBLIC_KEY = ""  # set via fly secrets
+  VAPID_PRIVATE_KEY = ""  # set via fly secrets
+
+[http_service]
+  internal_port = 3001
+  force_https = true
+
+[[mounts]]
+  source = "sadhana_data"
+  destination = "/data"
