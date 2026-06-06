@@ -2,7 +2,9 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
-const DB_PATH = path.join(__dirname, 'sadhana.db');
+const DB_PATH = process.env.DATA_DIR
+  ? path.join(process.env.DATA_DIR, 'sadhana.db')
+  : path.join(__dirname, 'sadhana.db');
 
 let db;
 
