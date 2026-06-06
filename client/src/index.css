@@ -1,0 +1,111 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  body {
+    @apply font-sans text-espresso leading-relaxed antialiased;
+    background-color: #FDFCF9;
+    background-image: radial-gradient(rgba(30,25,18,0.06) 1px, transparent 1px);
+    background-size: 24px 24px;
+  }
+
+  h1, h2, h3, h4 {
+    @apply font-display text-deepink;
+  }
+}
+
+@layer components {
+  .card-paper {
+    @apply bg-cream border border-sand rounded-lg;
+    box-shadow: 0 1px 3px rgba(30,25,18,0.08), inset 0 1px 0 rgba(255,255,255,0.5);
+  }
+  .card-paper:hover {
+    box-shadow: 0 2px 8px rgba(30,25,18,0.08), 0 1px 2px rgba(30,25,18,0.06);
+  }
+
+  .btn-primary {
+    @apply bg-deepink text-cream text-xs font-medium px-4 py-2 rounded-md transition-colors duration-200;
+    box-shadow: 0 1px 3px rgba(30,25,18,0.08);
+  }
+  .btn-primary:hover {
+    @apply bg-ink;
+  }
+  .btn-primary:disabled {
+    @apply opacity-50 cursor-not-allowed;
+  }
+
+  .btn-secondary {
+    @apply bg-cream text-ink text-xs font-medium px-4 py-2 rounded-md border border-sand transition-colors duration-200;
+    box-shadow: 0 1px 3px rgba(30,25,18,0.08);
+  }
+  .btn-secondary:hover {
+    @apply bg-linen;
+  }
+
+  .btn-ghost {
+    @apply text-bark text-xs font-medium px-3 py-1.5 rounded-md transition-colors duration-200;
+  }
+  .btn-ghost:hover {
+    @apply bg-linen text-ink;
+  }
+
+  .btn-success {
+    @apply text-forest text-xs font-medium px-4 py-2 rounded-md border transition-colors duration-200;
+    background-color: rgba(22,163,74,0.08);
+    border-color: rgba(22,163,74,0.2);
+  }
+  .btn-success:hover {
+    background-color: rgba(22,163,74,0.14);
+  }
+
+  .input-field {
+    @apply w-full bg-cream border border-sand rounded-lg px-3 py-2.5 text-sm text-ink placeholder-stone transition-colors duration-200;
+  }
+  .input-field:focus {
+    @apply border-ink outline-none;
+    box-shadow: 0 1px 3px rgba(30,25,18,0.08);
+  }
+
+  .badge {
+    @apply inline-flex items-center gap-1 bg-linen border border-sand rounded px-1.5 py-0.5 text-[10px] font-medium text-bark;
+  }
+
+  .progress-bar {
+    @apply h-1.5 rounded-full bg-linen overflow-hidden;
+  }
+  .progress-bar-fill {
+    @apply h-full rounded-full transition-all duration-500 ease-out;
+  }
+}
+
+@keyframes check-pop {
+  0% { transform: scale(0.6); opacity: 0; }
+  60% { transform: scale(1.15); }
+  100% { transform: scale(1); opacity: 1; }
+}
+
+@keyframes slide-up {
+  from { opacity: 0; transform: translateY(12px); }
+  to { opacity: 1; transform: translateY(0); }
+}
+
+@keyframes fade-in {
+  from { opacity: 0; }
+  to { opacity: 1; }
+}
+
+@keyframes streak-pulse {
+  0%, 100% { transform: scale(1); }
+  50% { transform: scale(1.05); }
+}
+
+.animate-check-pop { animation: check-pop 0.3s cubic-bezier(0.34, 1.56, 0.64, 1); }
+.animate-slide-up { animation: slide-up 0.4s ease-out both; }
+.animate-fade-in { animation: fade-in 0.3s ease-out; }
+.animate-streak-pulse { animation: streak-pulse 2s ease-in-out infinite; }
+
+::-webkit-scrollbar { width: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #DDD9D0; border-radius: 3px; }
+::-webkit-scrollbar-thumb:hover { background: #C5C0B6; }
