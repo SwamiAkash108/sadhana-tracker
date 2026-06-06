@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="theme-color" content="#FDFCF9">
+<meta name="description" content="Sadhana Tracker — track your daily spiritual practices">
+<link rel="manifest" href="manifest.json">
+<link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600&family=Lora:wght@400;500;600;700&family=Newsreader:ital,wght@0,400;0,500;1,400;1,500&display=swap" rel="stylesheet">
+<title>Sadhana Tracker</title>
+<style>
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+:root{
+  --cream:#FDFCF9;--linen:#F0EDE6;--khaki:#E8E4DB;--sand:#DDD9D0;
+  --stone:#C5C0B6;--walnut:#8A8478;--bark:#6B665D;--espresso:#4A4640;
+  --ink:#2C2A25;--deepink:#1A1814;--forest:#16A34A;--amber:#D97706;--brick:#DC2626
+}
+body{
+  font-family:'Inter',sans-serif;color:var(--ink);line-height:1.6;background:var(--cream);
+  background-image:radial-gradient(rgba(30,25,18,0.06) 1px,transparent 1px);background-size:24px 24px
+}
+.card{
+  background:var(--cream);border:1px solid var(--sand);border-radius:10px;
+  box-shadow:0 1px 3px rgba(30,25,18,0.08),inset 0 1px 0 rgba(255,255,255,0.5);padding:20px
+}
+.card:hover{box-shadow:0 2px 8px rgba(30,25,18,0.08)}
+h1,h2,h3{font-family:'Lora',serif;color:var(--deepink)}
+.btn{
+  display:inline-flex;align-items:center;gap:6px;font-family:'Inter',sans-serif;
+  font-size:12px;font-weight:500;padding:8px 16px;border-radius:7px;border:none;
+  cursor:pointer;transition:all 0.2s
+}
+.btn-primary{background:var(--deepink);color:var(--cream);box-shadow:0 1px 3px rgba(30,25,18,0.08)}
+.btn-primary:hover{background:var(--ink)}
+.btn-ghost{background:transparent;color:var(--bark)}
+.btn-ghost:hover{background:var(--linen);color:var(--ink)}
+.btn-secondary{background:var(--cream);color:var(--ink);border:1px solid var(--sand)}
+.btn-secondary:hover{background:var(--linen)}
+.input{
+  width:100%;background:var(--cream);border:1px solid var(--sand);border-radius:8px;
+  padding:10px 12px;font-family:'Inter',sans-serif;font-size:14px;color:var(--ink);
+  transition:border-color 0.2s
+}
+.input:focus{outline:none;border-color:var(--ink);box-shadow:0 1px 3px rgba(30,25,18,0.08)}
+.input::placeholder{color:var(--stone)}
+.progress-bar{height:6px;border-radius:3px;background:var(--linen);overflow:hidden}
+.progress-fill{height:100%;border-radius:3px;transition:width 0.5s ease;background:var(--ink)}
+.progress-fill.done{background:var(--forest)}
+.badge{display:inline-flex;align-items:center;gap:4px;background:var(--linen);
+  border:1px solid var(--sand);border-radius:4px;padding:2px 8px;font-size:10px;
+  font-weight:500;color:var(--bark)}
+.tab{flex:1;text-align:center;padding:8px 0;font-size:12px;font-weight:500;
+  border-radius:6px;border:none;cursor:pointer;background:transparent;color:var(--walnut);
+  transition:all 0.2s;font-family:'Inter',sans-serif}
+.tab.active{background:var(--deepink);color:var(--cream);box-shadow:0 1px 3px rgba(30,25,18,0.1)}
+.tab:hover:not(.active){background:var(--khaki);color:var(--ink)}
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(253,252,249,0.9);
+  backdrop-filter:blur(8px);border-bottom:1px solid var(--sand)}
+.check-item{
+  width:100%;display:flex;align-items:center;gap:14px;padding:14px 0;
+  border:none;background:transparent;cursor:pointer;text-align:left;
+  font-family:'Inter',sans-serif;transition:opacity 0.2s
+}
+.check-item:not(:last-child){border-bottom:1px solid rgba(221,217,208,0.5)}
+.check-item:hover{background:rgba(240,237,230,0.4)}
+.check-item.done{opacity:0.55}
+.check-circle{
+  width:22px;height:22px;border-radius:50%;border:2px solid var(--stone);
+  flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  transition:all 0.2s
+}
+.check-item.done .check-circle{background:var(--forest);border-color:var(--forest)}
+.check-icon{display:none;width:12px;height:12px;color:var(--cream)}
+.check-item.done .check-icon{display:block}
+.check-text{flex:1;min-width:0}
+.check-name{font-size:14px;font-weight:500;color:var(--ink);display:flex;align-items:center;gap:8px}
+.check-item.done .check-name{color:var(--walnut);text-decoration:line-through}
+.check-desc{font-size:11px;color:var(--walnut);margin-top:2px}
+.heatmap-cell{border-radius:2px;aspect-ratio:1;transition:transform 0.15s}
+.heatmap-cell:hover{transform:scale(1.15)}
+@keyframes fadeIn{from{opacity:0;transform:translateY(10px)}to{opacity:1;transform:translateY(0)}}
+@keyframes checkPop{0%{transform:scale(0.6);opacity:0}60%{transform:scale(1.2)}100%{transform:scale(1);opacity:1}}
+.animate-in{animation:fadeIn 0.3s ease-out both}
+.animate-pop{animation:checkPop 0.3s cubic-bezier(0.34,1.56,0.64,1)}
+</style>
+</head>
+<body>
+
+<div id="app"></div>
+
+<script>
+var LS={get:function(k,d){try{var v=localStorage.getItem('sadhana_'+k);return v?JSON.parse(v):d}catch(e){return d}},set:function(k,v){localStorage.setItem('sadhana_'+k,JSON.stringify(v))}};
+function today(){return new Date().toISOString().split('T')[0]}
+function fmt(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})}
+function fmtLong(d){return new Date(d+'T00:00:00').toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})}
+var ITEMS=[
+  {id:'japa',name:'Japa',desc:'Chanting rounds of the Hare Krishna mahamantra',emoji:'📿'},
+  {id:'kirtan',name:'Kirtan',desc:'Congregational chanting or personal kirtan',emoji:'🎵'},
+  {id:'bhagavatam',name:'Śrīmad Bhāgavatam',desc:'Reading or hearing Śrīmad Bhāgavatam',emoji:'📖'},
+  {id:'gita',name:'Bhagavad Gītā',desc:'Reading or studying Bhagavad Gītā',emoji:'📔'},
+  {id:'meditation',name:'Meditation',desc:'Silent meditation or contemplation',emoji:'🧘'},
+  {id:'yoga',name:'Yoga / Āsanas',desc:'Physical yoga practice',emoji:'🤸'},
+  {id:'seva',name:'Sevā',desc:'Selfless service or volunteering',emoji:'🙏'},
+  {id:'gurupuja',name:'Guru Pūjā',desc:'Offering worship to the spiritual master',emoji:'🪷'},
+  {id:'mangala',name:'Maṅgala Ārati',desc:'Early morning worship ceremony',emoji:'🕯️'},
+  {id:'tulasi',name:'Tulasī Pūjā',desc:'Worship of Tulasī Devī',emoji:'🌿'},
+  {id:'prasadam',name:'Prasādam',desc:'Offering and honoring sanctified food',emoji:'🍃'},
+  {id:'study',name:'Study / Śāstra',desc:'General scriptural study and reflection',emoji:'📚'}
+];
+function getDaily(date){var k='daily_'+date;var d=LS.get(k,null);if(!d){d={};LS.set(k,d)}return d}
+function toggleItem(itemId){var date=today();var daily=getDaily(date);daily[itemId]=!daily[itemId];LS.set('daily_'+date,daily);return daily[itemId]}
+function getStreak(days){var dates=[];for(var i=days-1;i>=0;i--){var d=new Date();d.setDate(d.getDate()-i);dates.push(d.toISOString().split('T')[0])}
+var streak=0;for(var i=dates.length-1;i>=0;i--){var daily=getDaily(dates[i]);var done=ITEMS.filter(function(item){return daily[item.id]}).length;if(done>=ITEMS.length)streak++;else if(i===dates.length-1||done>=ITEMS.length)continue;else break}
+var dailyData=dates.map(function(date){var daily=getDaily(date);var done=ITEMS.filter(function(item){return daily[item.id]}).length;return{date:date,done:done,total:ITEMS.length,pct:ITEMS.length>0?Math.round(done/ITEMS.length*100):0}});
+var totalDone=dailyData.reduce(function(s,d){return s+d.done},0);var overallRate=Math.round(totalDone/(ITEMS.length*days)*100);return{streak:streak,days:days,overallRate:overallRate,dailyData:dailyData}}
+var app=document.getElementById('app');var activeTab='today';
+function heatColor(pct){if(pct===0)return'var(--linen)';if(pct<25)return'var(--khaki)';if(pct<50)return'var(--stone)';if(pct<75)return'var(--bark)';if(pct<100)return'var(--ink)';return'var(--forest)'}
+function h(tag,attrs){var children=[];for(var _i=2;_i<arguments.length;_i++)children[_i-2]=arguments[_i];var el=document.createElement(tag);if(attrs)for(var _a=0,_b=Object.entries(attrs);_a<_b.length;_a++){var _c=_b[_a],k=_c[0],v=_c[1];if(k.startsWith('on'))el.addEventListener(k.slice(2).toLowerCase(),v);else if(k==='className')el.className=v;else el.setAttribute(k,v)}for(var _d=0,children_1=children;_d<children_1.length;_d++){var c=children_1[_d];if(typeof c==='string')el.appendChild(document.createTextNode(c));else if(c instanceof Node)el.appendChild(c);else if(Array.isArray(c)){for(var _e=0,c_1=c;_e<c_1.length;_e++){var cc=c_1[_e];el.appendChild(cc instanceof Node?cc:document.createTextNode(String(cc)))}}else el.appendChild(document.createTextNode(String(c)))}return el}
+function render(){app.innerHTML='';var nav=h('nav',{className:'nav'},h('div',{style:'max-width:640px;margin:0 auto;padding:0 16px;height:56px;display:flex;align-items:center;justify-content:space-between'},h('div',{style:'display:flex;align-items:center;gap:10px'},h('span',{style:'fontSize:20px'},'🙏'),h('h1',{style:'fontSize:17px;fontWeight:500;lineHeight:1'},'Sadhana')),h('button',{className:'btn btn-ghost',onClick:function(){LS.set('name','');render()}},'Change name')));var main=h('div',{style:'max-width:640px;margin:0 auto;padding:72px 16px 40px'});var name=LS.get('name','');if(!name){main.appendChild(h('div',{className:'card',style:'textAlign:center'},h('h2',{style:'fontSize:18px;marginBottom:4px'},'Welcome 🙏'),h('p',{style:'fontSize:13px;color:var(--walnut);marginBottom:20px'},'Enter your name to begin tracking'),h('input',{type:'text',className:'input',placeholder:'Your name',style:'marginBottom:12px',id:'nameInput'}),h('button',{className:'btn btn-primary',style:'width:100%;justifyContent:center',onClick:function(){var v=document.getElementById('nameInput').value.trim();if(v){LS.set('name',v);render()}}},'Get started')));app.appendChild(nav);app.appendChild(main);setTimeout(function(){var el=document.getElementById('nameInput');if(el)el.focus()},50);return}
+name=LS.get('name','');var tabs=h('div',{className:'card',style:'padding:4px;display:flex;gap:2px;marginBottom:20px'},['today','streak','team'].map(function(key){return h('button',{className:'tab'+(activeTab===key?' active':''),onClick:function(){activeTab=key;render()}},key==='today'?'Today':key==='streak'?'My Progress':'Share')}));main.appendChild(tabs);
+if(activeTab==='today'){var date=today();var daily=getDaily(date);var doneCount=ITEMS.filter(function(i){return daily[i.id]}).length;var pct=Math.round(doneCount/ITEMS.length*100);var allDone=doneCount===ITEMS.length;var progressCard=h('div',{className:'card',style:'marginBottom:16px'});progressCard.appendChild(h('div',{style:'display:flex;justifyContent:space-between;alignItems:start;marginBottom:12px'},h('div',{},h('h2',{style:'fontSize:17px;marginBottom:2px'},fmtLong(date)),h('p',{style:'fontSize:12px;color:var(--walnut)'},allDone?'🎉 All done! Beautiful day.':(ITEMS.length-doneCount)+' remaining')),allDone?h('span',{style:'fontSize:28px'},'✨'):null));var pb=h('div',{className:'progress-bar',style:'marginBottom:8px'});pb.appendChild(h('div',{className:'progress-fill'+(allDone?' done':''),style:'width:'+pct+'%'}));progressCard.appendChild(pb);progressCard.appendChild(h('div',{style:'display:flex;justifyContent:space-between;fontSize:10px;color:var(--walnut)'},h('span',{},doneCount+' of '+ITEMS.length+' completed'),h('span',{style:'fontWeight:500;color:var(--bark)'},pct+'%')));main.appendChild(progressCard);var listCard=h('div',{className:'card',style:'padding:0;overflow:hidden'});ITEMS.forEach(function(item,i){var completed=!!daily[item.id];var btn=h('button',{className:'check-item'+(completed?' done':''),style:'paddingLeft:20px;paddingRight:20px;animationDelay:'+(i*40)+'ms',onClick:function(){toggleItem(item.id);render()}});var circle=h('div',{className:'check-circle'},h('svg',{className:'check-icon',viewBox:'0 0 24 24',fill:'none',stroke:'currentColor','stroke-width':'3'},h('path',{d:'M5 13l4 4L19 7','stroke-linecap':'round','stroke-linejoin':'round'})));btn.appendChild(circle);var text=h('div',{className:'check-text'},h('div',{className:'check-name'},item.emoji,item.name),!completed?h('div',{className:'check-desc'},item.desc):null);btn.appendChild(text);var dot=h('div',{style:'width:8px;height:8px;borderRadius:50%;flexShrink:0;background:'+(completed?'var(--forest)':'transparent')});btn.appendChild(dot);listCard.appendChild(btn)});main.appendChild(listCard);if('Notification' in window&&Notification.permission==='default'){main.appendChild(h('div',{className:'card',style:'marginTop:16px'},h('div',{style:'display:flex;alignItems:start;gap:12px'},h('span',{style:'fontSize:20px'},'🔔'),h('div',{style:'flex:1'},h('p',{style:'fontSize:13px;fontWeight:500;marginBottom:4px'},'Get daily reminders'),h('p',{style:'fontSize:11px;color:var(--walnut);marginBottom:12px'},'Tap Enable to get a daily notification reminder.'),h('div',{style:'display:flex;gap:8px'},h('button',{className:'btn btn-primary',onClick:function(){Notification.requestPermission().then(function(){render()})}},'Enable'),h('button',{className:'btn btn-ghost',onClick:function(){render()}},'Not now'))))))}}
+else if(activeTab==='streak'){var days_1=LS.get('streak_days',30);var stats=getStreak(days_1);var streakCard=h('div',{className:'card',style:'marginBottom:16px'});var icon=stats.streak>=7?'🔥':'📿';var msgs={0:'Start today — check off everything!',1:"You're building momentum.",7:'Strong commitment. Keep it up!',30:'Incredible dedication.'};var msg=msgs[0];if(stats.streak>=30)msg=msgs[30];else if(stats.streak>=7)msg=msgs[7];else if(stats.streak>=1)msg=msgs[1];streakCard.appendChild(h('div',{style:'display:flex;alignItems:center;gap:16px;marginBottom:16px'},h('div',{style:'width:56px;height:56px;borderRadius:50%;border:2px solid '+(stats.streak>=7?'var(--forest)':'var(--sand)')+';display:flex;alignItems:center;justifyContent:center;fontSize:28px;background:'+(stats.streak>=7?'rgba(22,163,74,0.06)':'var(--linen)')},icon),h('div',{},h('div',{style:'display:flex;alignItems:baseline;gap:6px'},h('span',{style:'fontSize:34px;fontWeight:600;fontFamily:"Lora,serif";color:"var(--deepink)"'},String(stats.streak)),h('span',{style:'fontSize:14px;color:"var(--bark)"'},'day streak')),h('p',{style:'fontSize:12px;color:"var(--walnut)";marginTop:2px'},msg)));var totalDone=stats.dailyData.reduce(function(s,d){return s+d.done},0);streakCard.appendChild(h('div',{style:'display:grid;gridTemplateColumns:"1fr 1fr";gap:12px'},h('div',{style:'background:var(--linen);borderRadius:8px;padding:12px;border:1px solid var(--sand)'},h('p',{style:'fontSize:10px;color:var(--walnut);textTransform:uppercase;letterSpacing:"0.5px";marginBottom:4px'},'Overall Rate'),h('p',{style:'fontSize:24px;fontWeight:600;fontFamily:"Lora,serif";color:"var(--deepink)"'},stats.overallRate+'%'),h('p',{style:'fontSize:10px;color:var(--walnut)'},'last '+stats.days+' days')),h('div',{style:'background:var(--linen);borderRadius:8px;padding:12px;border:1px solid var(--sand)'},h('p',{style:'fontSize:10px;color:var(--walnut);textTransform:uppercase;letterSpacing:"0.5px";marginBottom:4px'},'Total Check-ins'),h('p',{style:'fontSize:24px;fontWeight:600;fontFamily:"Lora,serif";color:"var(--deepink)"'},String(totalDone)),h('p',{style:'fontSize:10px;color:var(--walnut)'},'items completed'))));main.appendChild(streakCard);main.appendChild(h('div',{style:'display:flex;gap:4px;marginBottom:16px'},[7,14,30,60].map(function(d){return h('button',{className:'btn '+(d===days_1?'btn-primary':'btn-ghost'),style:'fontSize:11px;padding:6px 12px',onClick:function(){LS.set('streak_days',d);render()}},d+' days')})));var heatCard=h('div',{className:'card'});heatCard.appendChild(h('h3',{style:'fontSize:14px;marginBottom:14px'},'Daily Completion'));var grid=h('div',{style:'display:grid;gridTemplateColumns:"repeat(7,1fr)";gap:6px'});stats.dailyData.forEach(function(day){grid.appendChild(h('div',{className:'heatmap-cell',style:'background:'+heatColor(day.pct),title:fmt(day.date)+': '+day.done+'/'+day.total+' ('+day.pct+'%)'}))});heatCard.appendChild(grid);heatCard.appendChild(h('div',{style:'display:flex;alignItems:center;justifyContent:flex-end;gap:4px;marginTop:12px;fontSize:10px;color:var(--walnut)'},h('span',{},'Less'),[0,25,50,75,100].map(function(pct){return h('div',{style:'width:12px;height:12px;borderRadius:2px;background:'+heatColor(pct)})}),h('span',{},'More')));main.appendChild(heatCard)}
+else{var date_1=today();var daily_1=getDaily(date_1);var doneCount_1=ITEMS.filter(function(i){return daily_1[i.id]}).length;var pct_1=Math.round(doneCount_1/ITEMS.length*100);var shareCard=h('div',{className:'card',style:'marginBottom:16px'},h('h2',{style:'fontSize:17px;marginBottom:8px'},'Share Your Progress'),h('p',{style:'fontSize:13px;color:var(--walnut);lineHeight:1.5'},'This tracker stores your data locally in your browser. To share progress, each person opens this page on their own device and tracks individually.'));shareCard.appendChild(h('div',{style:'marginTop:16px;padding:14px;background:var(--linen);borderRadius:8px;border:1px solid var(--sand)'},h('p',{style:'fontSize:12px;color:var(--walnut);marginBottom:6px'},'Your status for '+fmt(date_1)),h('p',{style:'fontSize:15px;fontWeight:500'},name+': '+doneCount_1+'/'+ITEMS.length+' ('+pct_1+'%)'),h('button',{className:'btn btn-secondary',style:'marginTop:10px;fontSize:11px',onClick:function(){var text='🙏 '+name+"'s Sadhana — "+fmt(date_1)+': '+doneCount_1+'/'+ITEMS.length+' ('+pct_1+'%)\n\n'+ITEMS.map(function(i){return(daily_1[i.id]?'✅':'⬜')+' '+i.emoji+' '+i.name}).join('\n')+'\n\nTrack yours: '+window.location.href;navigator.clipboard&&navigator.clipboard.writeText?navigator.clipboard.writeText(text).then(function(){alert('Copied!')}).catch(function(){alert(text)}):alert(text)}},'📋 Copy my status')));main.appendChild(shareCard);main.appendChild(h('div',{className:'card'},h('h3',{style:'fontSize:14px;marginBottom:10px'},'For your team'),h('div',{style:'fontSize:12px;color:var(--walnut);lineHeight:1.6'},h('p',{},'1. Share this page URL with your friends'),h('p',{},'2. Each person enters their name and tracks daily'),h('p',{},'3. Use 📋 Copy to share your daily status'),h('p',{},'4. Data stays private in each browser'))))}
+app.appendChild(nav);app.appendChild(main)}
+render();
+if('serviceWorker' in navigator){navigator.serviceWorker.register('sw.js').catch(function(){})}
+</script>
+</body>
+</html>
