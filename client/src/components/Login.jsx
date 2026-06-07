@@ -28,54 +28,29 @@ export default function Login() {
     <div className="min-h-screen flex items-center justify-center p-4">
       <div className="w-full max-w-sm animate-slide-up">
         <div className="text-center mb-8">
-          <h1 className="text-[32px] font-display font-medium text-deepink mb-1.5">Sadhana</h1>
-          <p className="text-sm text-bark">Track your daily spiritual practices together</p>
+          <h1 className="text-[42px] font-display font-black text-ink leading-none mb-1">SADHANA</h1>
+          <p className="text-xs text-mute font-sans tracking-wider uppercase">Welcome Back</p>
         </div>
-
-        <div className="card-paper p-6">
-          <h2 className="text-lg font-display text-deepink mb-5">Welcome back</h2>
-
+        <div className="card-wood p-6">
           {error && (
-            <div className="mb-4 px-3 py-2 rounded-md text-xs text-brick border" style={{ backgroundColor: 'rgba(220,38,38,0.06)', borderColor: 'rgba(220,38,38,0.2)' }}>
-              {error}
-            </div>
+            <div className="mb-5 px-4 py-3 rounded border-2 border-red-500 bg-red-50 text-xs text-red-700">{error}</div>
           )}
-
-          <form onSubmit={handleSubmit} className="space-y-4">
+          <form onSubmit={handleSubmit} className="space-y-5">
             <div>
-              <label className="block text-xs font-medium text-bark mb-1.5 ml-1">Email</label>
-              <input
-                type="email"
-                className="input-field"
-                placeholder="you@example.com"
-                value={email}
-                onChange={e => setEmail(e.target.value)}
-                required
-                autoFocus
-              />
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-mute mb-1.5">Email Address</label>
+              <input type="email" className="input-wood" placeholder="you@example.com" value={email} onChange={e => setEmail(e.target.value)} required autoFocus />
             </div>
             <div>
-              <label className="block text-xs font-medium text-bark mb-1.5 ml-1">Password</label>
-              <input
-                type="password"
-                className="input-field"
-                placeholder="••••••••"
-                value={password}
-                onChange={e => setPassword(e.target.value)}
-                required
-                minLength={6}
-              />
+              <label className="block text-[10px] font-bold uppercase tracking-widest text-mute mb-1.5">Password</label>
+              <input type="password" className="input-wood" placeholder="••••••••" value={password} onChange={e => setPassword(e.target.value)} required minLength={6} />
             </div>
-            <button type="submit" disabled={loading} className="btn-primary w-full text-sm py-2.5">
-              {loading ? 'Signing in...' : 'Sign in'}
+            <button type="submit" disabled={loading} className="btn-wood w-full">
+              {loading ? 'Signing In…' : 'Log In →'}
             </button>
           </form>
-
-          <div className="mt-5 pt-4 border-t border-sand/60 text-center">
-            <span className="text-xs text-walnut">New here? </span>
-            <Link to="/register" className="text-xs font-medium text-ink hover:text-deepink transition-colors">
-              Create an account
-            </Link>
+          <div className="mt-6 pt-4 border-t-2 border-ink text-center">
+            <span className="text-xs text-mute">New to Sadhana? </span>
+            <Link to="/register" className="text-xs font-bold text-ink uppercase tracking-wider hover:text-rust transition-colors">Create Account →</Link>
           </div>
         </div>
       </div>
