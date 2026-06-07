@@ -35,19 +35,12 @@ if (fs.existsSync(clientDist)) {
   });
   console.log('Serving static frontend from', clientDist);
 } else {
-  console.log('Frontend not built yet. Run: cd client && npm run build');
+  console.log('Frontend not built yet.');
   app.get('/', (req, res) => {
     res.json({ message: 'Sadhana Tracker API running. Build frontend for full app.' });
   });
 }
 
 app.listen(PORT, () => {
-  console.log(`Sadhana Tracker server running on http://localhost:${PORT}`);
-  console.log(`API: http://localhost:${PORT}/api/health`);
-
-  if (!process.env.VAPID_PUBLIC_KEY) {
-    console.warn('\n⚠️  Push notifications not configured. To enable:');
-    console.warn('   1. Run: cd server && npx web-push generate-vapid-keys');
-    console.warn('   2. Set VAPID_PUBLIC_KEY and VAPID_PRIVATE_KEY env vars\n');
-  }
+  console.log(`Sadhana Tracker server running on port ${PORT}`);
 });

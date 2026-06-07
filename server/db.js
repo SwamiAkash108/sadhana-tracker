@@ -1,6 +1,6 @@
-import Database from 'better-sqlite3';
-import path from 'path';
-import { v4 as uuidv4 } from 'uuid';
+const Database = require('better-sqlite3');
+const path = require('path');
+const { v4: uuidv4 } = require('uuid');
 
 const DB_PATH = process.env.DATA_DIR
   ? path.join(process.env.DATA_DIR, 'sadhana.db')
@@ -27,7 +27,6 @@ function initSchema() {
       password_hash TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS sadhana_items (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -41,7 +40,6 @@ function initSchema() {
       am_pm INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
-
     CREATE TABLE IF NOT EXISTS daily_progress (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -53,7 +51,6 @@ function initSchema() {
       FOREIGN KEY (item_id) REFERENCES sadhana_items(id),
       UNIQUE(user_id, item_id, date)
     );
-
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -61,12 +58,10 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
-
     CREATE INDEX IF NOT EXISTS idx_daily_progress_user_date ON daily_progress(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_daily_progress_date ON daily_progress(date);
   `);
 
-  // Seed default sadhana items if table is empty
   const count = db.prepare('SELECT COUNT(*) as cnt FROM sadhana_items').get();
   if (count.cnt === 0) {
     const defaults = [
@@ -99,4 +94,4 @@ function initSchema() {
   }
 }
 
-export default { getDb };
+module.exports = { getDb };
