@@ -1,6 +1,6 @@
-const Database = require('better-sqlite3');
-const path = require('path');
-const { v4: uuidv4 } = require('uuid');
+import Database from 'better-sqlite3';
+import path from 'path';
+import { v4 as uuidv4 } from 'uuid';
 
 const DB_PATH = process.env.DATA_DIR
   ? path.join(process.env.DATA_DIR, 'sadhana.db')
@@ -35,6 +35,10 @@ function initSchema() {
       emoji TEXT DEFAULT '',
       sort_order INTEGER DEFAULT 0,
       active INTEGER DEFAULT 1,
+      category TEXT DEFAULT '',
+      item_type TEXT DEFAULT 'toggle',
+      target INTEGER DEFAULT 0,
+      am_pm INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
 
@@ -62,31 +66,37 @@ function initSchema() {
     CREATE INDEX IF NOT EXISTS idx_daily_progress_date ON daily_progress(date);
   `);
 
+  // Seed default sadhana items if table is empty
   const count = db.prepare('SELECT COUNT(*) as cnt FROM sadhana_items').get();
   if (count.cnt === 0) {
     const defaults = [
-      { name: 'Japa', description: 'Chanting rounds of the Hare Krishna mahamantra', emoji: '📿', sort_order: 1 },
-      { name: 'Kirtan', description: 'Congregational chanting or personal kirtan', emoji: '🎵', sort_order: 2 },
-      { name: 'Śrīmad Bhāgavatam', description: 'Reading or hearing Śrīmad Bhāgavatam', emoji: '📖', sort_order: 3 },
-      { name: 'Bhagavad Gītā', description: 'Reading or studying Bhagavad Gītā', emoji: '📔', sort_order: 4 },
-      { name: 'Meditation', description: 'Silent meditation or contemplation', emoji: '🧘', sort_order: 5 },
-      { name: 'Yoga / Āsanas', description: 'Physical yoga practice', emoji: '🤸', sort_order: 6 },
-      { name: 'Sevā', description: 'Selfless service or volunteering', emoji: '🙏', sort_order: 7 },
-      { name: 'Guru Pūjā', description: 'Offering worship to the spiritual master', emoji: '🪷', sort_order: 8 },
-      { name: 'Maṅgala Ārati', description: 'Early morning worship ceremony', emoji: '🕯️', sort_order: 9 },
-      { name: 'Tulasī Pūjā', description: 'Worship of Tulasī Devī', emoji: '🌿', sort_order: 10 },
-      { name: 'Prasādam', description: 'Offering and honoring sanctified food', emoji: '🍃', sort_order: 11 },
-      { name: 'Study / Śāstra', description: 'General scriptural study and reflection', emoji: '📚', sort_order: 12 },
+      { name: 'Suka Purvaka', description: 'Easy breathing — 20 rounds', emoji: '🌬️', sort_order: 1, category: 'pranayama', type: 'counter', target: 20 },
+      { name: 'Nadhi Shuddhi', description: 'Alternate nostril cleansing', emoji: '🫧', sort_order: 2, category: 'pranayama', type: 'counter', target: 20 },
+      { name: 'Main Kriya', description: 'Atma Kriya rounds', emoji: '🔥', sort_order: 3, category: 'kriya', type: 'counter', target: 6, am_pm: true },
+      { name: 'Khecari Mudra', description: 'Tongue lock gesture', emoji: '👁️', sort_order: 4, category: 'mudras', type: 'toggle' },
+      { name: 'Maha Mudra', description: 'Great seal pose — 3 rounds', emoji: '🤲', sort_order: 5, category: 'mudras', type: 'counter', target: 3 },
+      { name: 'Kurmasana', description: 'Tortoise pose', emoji: '🐢', sort_order: 6, category: 'mudras', type: 'toggle' },
+      { name: 'Simhasana', description: 'Lion pose — 5 rounds', emoji: '🦁', sort_order: 7, category: 'mudras', type: 'counter', target: 5 },
+      { name: 'Svastikasana', description: 'Auspicious pose', emoji: '🪷', sort_order: 8, category: 'mudras', type: 'toggle' },
+      { name: 'Shavasana', description: 'Corpse pose relaxation', emoji: '🧎', sort_order: 9, category: 'mudras', type: 'toggle' },
+      { name: 'Trinity Meditation', description: 'Triple focus meditation — 5 rounds', emoji: '🧘', sort_order: 10, category: 'meditation', type: 'counter', target: 5 },
+      { name: 'Nada Kriya', description: 'Sound meditation — up to 20 min', emoji: '🎵', sort_order: 11, category: 'meditation', type: 'timer', target: 1200 },
+      { name: 'Kriya Level 2', description: 'Advanced kriya practice', emoji: '⭐', sort_order: 12, category: 'advanced', type: 'toggle' },
+      { name: 'Japa', description: 'Hare Krishna mahamantra chanting — 60 min', emoji: '📿', sort_order: 13, category: 'japa', type: 'timer', target: 3600 },
+      { name: 'Exercise', description: 'Physical workout — 10 min minimum', emoji: '🏃', sort_order: 14, category: 'quick', type: 'toggle' },
+      { name: 'Water', description: 'Hydration — 2 litres', emoji: '💧', sort_order: 15, category: 'quick', type: 'toggle' },
+      { name: 'Study', description: 'Scriptural study & reflection', emoji: '📖', sort_order: 16, category: 'quick', type: 'toggle' },
+      { name: 'Abhishekam', description: 'Sacred bathing ritual', emoji: '🪷', sort_order: 17, category: 'quick', type: 'toggle' },
     ];
 
-    const insert = db.prepare('INSERT INTO sadhana_items (id, name, description, emoji, sort_order) VALUES (?, ?, ?, ?, ?)');
+    const insert = db.prepare('INSERT INTO sadhana_items (id, name, description, emoji, sort_order, category, item_type, target, am_pm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
     const insertMany = db.transaction((items) => {
       for (const item of items) {
-        insert.run(uuidv4(), item.name, item.description, item.emoji, item.sort_order);
+        insert.run(uuidv4(), item.name, item.description, item.emoji, item.sort_order, item.category, item.type, item.target || 0, item.am_pm ? 1 : 0);
       }
     });
     insertMany(defaults);
   }
 }
 
-module.exports = { getDb };
+export default { getDb };
