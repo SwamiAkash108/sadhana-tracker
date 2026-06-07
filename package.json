@@ -1,14 +1,9 @@
 {
   "name": "sadhana-tracker",
-  "version": "1.0.0",
-  "description": "Shared sadhana tracker with progress visibility and push notifications",
   "private": true,
-  "scripts": {
-    "install:all": "cd server && npm install && cd ../client && npm install",
-    "dev:server": "cd server && node index.js",
-    "dev:client": "cd client && npx vite",
-    "build:client": "cd client && npx vite build",
-    "start": "cd server && node index.js",
-    "setup": "npm run install:all && npm run build:client"
+  "description": "Bhakti Marga daily sadhana tracker — PWA with JWT auth, team visibility, push notifications",
+  "devDependencies": {
+    "vite": "^5.4.2",
+    "@vitejs/plugin-react": "^4.3.1"
   }
 }
