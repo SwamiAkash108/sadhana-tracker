@@ -13,8 +13,8 @@ services:
       - key: VAPID_SUBJECT
         value: mailto:akashananda@bhaktimarga.org
       - key: JWT_SECRET
-        sync: false
+        value: cec46db8bb4172c39642438770211b26d237964f643a5bdb26bacd5227efa3ae
       - key: VAPID_PUBLIC_KEY
-        sync: false
+        value: BFAE9s_fUaAwixgQpTBbFaIeDGKtV2sOFXghNNngdMBDAEXPC9-zwPuFKkq1_ecitIbRgdtwClQlHbUxLmSz3HU
       - key: VAPID_PRIVATE_KEY
-        sync: false
+        value: aaX_jFd6Q-_ag4di3yGKxNs-rfUgElKMkfx6zTJqA-I
