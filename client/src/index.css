@@ -6,42 +6,167 @@
   body {
     @apply font-sans text-ink antialiased;
     background-color: #FAFAF6;
-    background-image: radial-gradient(circle, #1A1A1A 1px, transparent 1px);
-    background-size: 20px 20px;
   }
-  h1, h2, h3, h4 { @apply font-display text-ink; }
+
+  h1, h2, h3, h4 {
+    @apply font-display text-ink;
+  }
 }
 
 @layer components {
+  /* Woodcut card — thick black border with offset shadow */
   .card-wood {
-    @apply bg-paper border-2 border-ink rounded;
+    @apply bg-paper border-2 border-ink;
     box-shadow: 3px 3px 0px #1A1A1A;
   }
+  .card-wood-sm {
+    @apply bg-paper border border-ink;
+    box-shadow: 2px 2px 0px #1A1A1A;
+  }
+
+  /* Primary button — solid black */
   .btn-wood {
-    @apply bg-ink text-paper font-sans text-xs font-semibold uppercase tracking-wider
-           px-5 py-3 rounded border-2 border-ink transition-all duration-150 cursor-pointer;
+    @apply bg-ink text-paper font-sans text-xs font-bold uppercase tracking-widest
+           px-6 py-3 border-2 border-ink transition-all duration-150;
     box-shadow: 2px 2px 0px #1A1A1A;
   }
-  .btn-wood:hover { transform: translate(1px, 1px); box-shadow: 1px 1px 0px #1A1A1A; }
-  .btn-wood:active { transform: translate(2px, 2px); box-shadow: 0px 0px 0px #1A1A1A; }
-  .btn-wood:disabled { @apply opacity-40 cursor-not-allowed; transform: none; box-shadow: 2px 2px 0px #1A1A1A; }
+  .btn-wood:hover {
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px #1A1A1A;
+  }
+  .btn-wood:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0px 0px 0px #1A1A1A;
+  }
+  .btn-wood:disabled {
+    @apply opacity-40 cursor-not-allowed;
+    transform: none;
+    box-shadow: 2px 2px 0px #1A1A1A;
+  }
+
+  /* Rust accent button */
   .btn-rust {
-    @apply bg-rust text-paper font-sans text-xs font-semibold uppercase tracking-wider
-           px-5 py-3 rounded border-2 border-ink transition-all duration-150 cursor-pointer;
+    @apply bg-rust text-paper font-sans text-xs font-bold uppercase tracking-widest
+           px-6 py-3 border-2 border-ink transition-all duration-150;
     box-shadow: 2px 2px 0px #1A1A1A;
   }
-  .btn-rust:hover { transform: translate(1px, 1px); box-shadow: 1px 1px 0px #1A1A1A; }
-  .btn-rust:active { transform: translate(2px, 2px); box-shadow: 0px 0px 0px #1A1A1A; }
+  .btn-rust:hover {
+    @apply bg-rust-dark;
+    transform: translate(1px, 1px);
+    box-shadow: 1px 1px 0px #1A1A1A;
+  }
+  .btn-rust:active {
+    transform: translate(2px, 2px);
+    box-shadow: 0px 0px 0px #1A1A1A;
+  }
+
+  /* Input field */
   .input-wood {
-    @apply w-full bg-paper border-2 border-ink rounded px-4 py-3 text-sm text-ink
-           placeholder-mute font-sans transition-all;
+    @apply w-full bg-paper border-2 border-ink px-4 py-3 text-sm text-ink
+           placeholder-mute font-sans transition-all duration-150;
     box-shadow: 2px 2px 0px #1A1A1A;
   }
-  .input-wood:focus { @apply outline-none; border-color: #C4633A; box-shadow: 2px 2px 0px #C4633A; }
-  .nav-bottom { @apply fixed bottom-0 left-0 right-0 bg-paper border-t-2 border-ink z-50; box-shadow: 0 -2px 0px #1A1A1A; }
-  .bar-wood { @apply h-2.5 rounded bg-paper-dark border border-ink overflow-hidden; }
-  .bar-wood-fill { @apply h-full transition-all duration-500; background-color: #1A1A1A; }
+  .input-wood:focus {
+    @apply outline-none;
+    box-shadow: 2px 2px 0px #C4633A;
+    border-color: #C4633A;
+  }
+
+  /* Desktop sidebar */
+  .sidebar-desktop {
+    @apply fixed left-0 top-0 bottom-0 w-[220px] bg-ink z-40 flex flex-col;
+    box-shadow: 3px 0px 0px #1A1A1A;
+  }
+
+  /* Sidebar nav item */
+  .sidebar-nav-item {
+    @apply flex items-center gap-3 px-4 py-3 text-xs font-bold uppercase tracking-widest
+           transition-all duration-150 cursor-pointer border-l-4 border-transparent;
+    color: #A0A09A;
+  }
+  .sidebar-nav-item:hover {
+    color: #FAFAF6;
+  }
+  .sidebar-nav-item.active {
+    @apply border-rust;
+    background: #2A2A2A;
+    color: #FAFAF6;
+  }
+
+  /* Bottom nav (mobile) */
+  .nav-bottom {
+    @apply fixed bottom-0 left-0 right-0 bg-paper border-t-2 border-ink z-50 lg:hidden;
+    box-shadow: 0 -2px 0px #1A1A1A;
+  }
+
+  /* Progress bar */
+  .bar-wood {
+    @apply h-2 rounded-sm bg-stone border border-ink overflow-hidden;
+  }
+  .bar-wood-fill {
+    @apply h-full transition-all duration-500;
+    background-color: #1A1A1A;
+  }
+  .bar-wood-fill.rust {
+    background-color: #C4633A;
+  }
+  .bar-wood-fill.sage {
+    background-color: #5A8A5A;
+  }
+
+  /* Stats card */
+  .stat-card {
+    @apply card-wood p-5 text-center;
+  }
+
+  /* Diagonal hatch pattern */
+  .hatch-diagonal {
+    background-image: repeating-linear-gradient(
+      -45deg,
+      #1A1A1A 0px,
+      #1A1A1A 2px,
+      transparent 2px,
+      transparent 8px
+    );
+  }
+
+  /* Dot grid background for main content */
+  .bg-dot-grid {
+    background-color: #FAFAF6;
+    background-image: radial-gradient(circle, #D4D4D0 1px, transparent 1px);
+    background-size: 16px 16px;
+  }
+
+  /* Calendar heat cell */
+  .heat-cell {
+    @apply w-full aspect-square border transition-transform duration-150 cursor-default;
+    border-color: rgba(26,26,26,0.1);
+  }
+  .heat-cell:hover {
+    transform: scale(1.15);
+  }
 }
 
+/* Scrollbar */
 ::-webkit-scrollbar { width: 4px; }
-::-webkit-scrollbar-thumb { background: #1A1A1A; border-radius: 2px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #1A1A1A; }
+
+/* Animations */
+.animate-check-pop { animation: checkPop 0.25s cubic-bezier(0.34,1.56,0.64,1); }
+.animate-slide-up { animation: slideUp 0.3s ease-out both; }
+.animate-fade-in { animation: fadeIn 0.2s ease-out; }
+
+@keyframes checkPop {
+  0% { transform: scale(0.5); opacity: 0; }
+  60% { transform: scale(1.2); }
+  100% { transform: scale(1); opacity: 1; }
+}
+@keyframes slideUp {
+  0% { opacity: 0; transform: translateY(8px); }
+  100% { opacity: 1; transform: translateY(0); }
+}
+@keyframes fadeIn {
+  0% { opacity: 0; }
+  100% { opacity: 1; }
+}
