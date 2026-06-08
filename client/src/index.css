@@ -3,33 +3,36 @@
 @tailwind utilities;
 
 @layer base {
-  body {
-    @apply font-sans text-ink antialiased;
-    background-color: #fcf9f8;
-  }
-  h1, h2, h3, h4 { @apply font-display; }
+  body { @apply antialiased; }
 }
 
 @layer components {
-  .card-woodcut { background: #fcf9f8; border: 4px solid #000; box-shadow: 4px 4px 0px 0px #000; }
-  .card-woodcut-sm { background: #fcf9f8; border: 2px solid #000; box-shadow: 2px 2px 0px 0px #000; }
-  .bg-halftone { background-image: radial-gradient(#000 1px, transparent 1px); background-size: 8px 8px; }
-  .bg-halftone-secondary { background-image: radial-gradient(#b22a27 1px, transparent 1px); background-size: 8px 8px; }
-  .btn-woodcut { @apply font-bold uppercase tracking-wider border-4 border-black transition-all duration-150; box-shadow: 4px 4px 0px 0px #000; }
-  .btn-woodcut:hover { transform: translate(2px, 2px); box-shadow: 2px 2px 0px 0px #000; }
-  .btn-woodcut:active { transform: translate(4px, 4px); box-shadow: 0px 0px 0px 0px #000; }
-  .sidebar-desktop { @apply fixed left-0 top-0 bottom-0 w-[220px] bg-ink z-40 flex flex-col; box-shadow: 3px 0px 0px #1A1A1A; }
-  .sidebar-nav-item { @apply flex items-center gap-3 px-4 py-3 text-xs font-bold uppercase tracking-widest transition-all duration-150 cursor-pointer border-l-4 border-transparent; color: #A0A09A; }
-  .sidebar-nav-item:hover { color: #FAFAF6; }
-  .sidebar-nav-item.active { @apply border-rust; background: #2A2A2A; color: #FAFAF6; }
-  .nav-bottom { @apply fixed bottom-0 left-0 right-0 z-50 lg:hidden; background: #fcf9f8; border-top: 4px solid #000; }
-  .header-mobile { @apply fixed top-0 left-0 right-0 z-40; background: #fcf9f8; border-bottom: 4px solid #000; }
-  .bar-progress { @apply h-4 w-full overflow-hidden; border: 2px solid #000; }
-  .bar-progress-fill { @apply h-full transition-all duration-500; background: #000; }
-  .bar-progress-fill.secondary { background: #b22a27; }
+  .halftone-bg {
+    background-image: radial-gradient(circle, #000000 1px, transparent 1.5px);
+    background-size: 8px 8px;
+  }
+  .halftone-bg-light {
+    background-image: radial-gradient(circle, #dcd9d9 1px, transparent 1px);
+    background-size: 20px 20px;
+  }
+  .woodcut-shadow { box-shadow: 6px 6px 0px 0px #000000; }
+  .woodcut-shadow-sm { box-shadow: 4px 4px 0px 0px #000000; }
+  .diagonal-stripes {
+    background-image: repeating-linear-gradient(45deg,#000000,#000000 2px,#ffffff 2px,#ffffff 6px);
+  }
+  .thin-border { border: 1px solid #000000; }
+  .stark-border { border: 4px solid #000000; }
+  .btn-woodcut {
+    @apply border-2 border-primary bg-primary text-on-primary font-label-sm text-label-sm uppercase tracking-wider transition-colors duration-200;
+    box-shadow: 4px 4px 0px 0px #000000;
+  }
+  .btn-woodcut:hover { @apply bg-secondary border-secondary; transform: translate(2px,2px); box-shadow: 2px 2px 0px 0px #000000; }
+  .btn-woodcut:active { transform: translate(4px,4px); box-shadow: 0px 0px 0px 0px #000000; }
+  .sidebar { @apply fixed left-0 top-0 h-full flex flex-col z-40 bg-surface w-64 border-r-4 border-primary; }
+  .topbar { @apply fixed top-0 left-64 right-0 flex items-center justify-between px-8 z-30 h-16 border-b-4 border-primary bg-surface; }
+  .main-canvas { @apply ml-64 mt-16 p-margin-desktop w-full max-w-7xl mx-auto; }
 }
+
 ::-webkit-scrollbar { width: 4px; }
 ::-webkit-scrollbar-track { background: transparent; }
-::-webkit-scrollbar-thumb { background: #1A1A1A; }
-.animate-check-pop { animation: checkPop 0.25s cubic-bezier(0.34,1.56,0.64,1); }
-@keyframes checkPop { 0% { transform: scale(0.5); opacity: 0; } 60% { transform: scale(1.2); } 100% { transform: scale(1); opacity: 1; } }
+::-webkit-scrollbar-thumb { background: #000000; }

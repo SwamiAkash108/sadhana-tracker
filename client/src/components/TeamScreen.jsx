@@ -1,57 +1,17 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState,useEffect,useCallback } from 'react';
 import { api } from '../api';
 
-export default function TeamScreen() {
-  const [team, setTeam] = useState(null);
-  const [loading, setLoading] = useState(true);
+export default function TeamScreen(){
+  const[team,setTeam]=useState(null);const[loading,setLoading]=useState(true);
+  const fetchTeam=useCallback(async()=>{try{const data=await api.getTeam();setTeam(data);}catch(err){}finally{setLoading(false);}},[]);
+  useEffect(()=>{fetchTeam();},[fetchTeam]);
+  if(loading)return(<div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"/></div>);
+  const members=team?.members||[];
 
-  const fetchTeam = useCallback(async () => {
-    try { const data = await api.getTeam(); setTeam(data); } catch (err) {}
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { fetchTeam(); }, [fetchTeam]);
-
-  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin"/></div>;
-
-  const members = team?.members || [];
-
-  return (
-    <div className="max-w-4xl mx-auto space-y-6">
-      <div className="mb-6">
-        <h2 className="text-4xl font-display font-bold text-black border-b-4 border-black inline-block pr-8 pb-2">Sangha</h2>
-        <p className="text-sm text-gray-500 mt-3 max-w-xl leading-relaxed">
-          Observe the discipline of your fellow practitioners. The path is solitary, yet we walk together.
-        </p>
-      </div>
-      {members.length===0?(
-        <div className="card-woodcut p-12 text-center"><p className="text-base text-gray-500">No members yet. Invite your sangha to walk the path together.</p></div>
-      ):(<div className="grid md:grid-cols-2 gap-6">{members.map(m=><MemberCard key={m.id} member={m}/>)}</div>)}
-    </div>
-  );
+  return(<div>
+    <div className="mb-12 border-b-4 border-primary pb-6 relative"><div className="absolute inset-0 halftone-bg opacity-10 -z-10"/><h2 className="font-headline-xl text-headline-xl text-primary mb-2">Sangha</h2><p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest bg-black text-white inline-block px-3 py-1">{members.length} Practitioner{members.length!==1?'s':''}</p></div>
+    {members.length===0?(<div className="bg-surface border-4 border-primary woodcut-shadow p-12 text-center"><span className="material-symbols-outlined text-5xl text-outline mb-4">groups</span><p className="font-body-lg text-body-lg text-on-surface-variant">No sangha members yet. Invite fellow practitioners to walk the path together.</p></div>):(<div className="grid md:grid-cols-2 gap-8">{members.map(m=><MemberCard key={m.id} member={m}/>)}</div>)}
+  </div>);
 }
 
-function MemberCard({ member }) {
-  const pct=member.percentage||0;
-  const isDone=pct>=100,isPartial=pct>0&&pct<100,isResting=pct===0;
-  const stats=[
-    {icon:'📿',label:'Japa',value:isResting?'--':isDone?'42m':'--',done:isDone},
-    {icon:'🧘',label:'AKY',value:isResting?'--':`${member.completed||0}/${member.total||0}`,done:isDone},
-    {icon:'🏃',label:'Exercise',value:isDone?'✅':isPartial?'➖':'➖',done:isDone},
-    {icon:'💧',label:'Water',value:isDone?'✅':isPartial?'➖':'➖',done:isDone},
-    {icon:'📖',label:'Study',value:isDone?'✅':isPartial?'➖':'➖',done:isDone},
-    {icon:'🪷',label:'Abhishekam',value:isDone?'✅':isPartial?'➖':'➖',done:isDone},
-  ];
-  return (
-    <article className={`card-woodcut p-5 relative group ${isResting?'opacity-75':''}`}>
-      <div className="absolute inset-0 bg-black translate-x-1 translate-y-1 -z-10"/>
-      <header className="flex justify-between items-center mb-4 border-b border-black pb-2">
-        <h3 className="text-xl font-display font-bold text-black flex items-center gap-2">{member.name}{isDone&&<span className="text-[#b22a27] text-base">★</span>}</h3>
-        <span className={`text-[10px] uppercase tracking-widest font-bold px-2 py-1 ${isDone?'bg-black text-white':isPartial?'bg-[#b22a27] text-white':'bg-gray-300 text-gray-600'}`}>{isDone?'Active':isPartial?'Partial':'Resting'}</span>
-      </header>
-      <div className={`grid grid-cols-3 sm:grid-cols-6 gap-3 text-[11px] ${isResting?'grayscale':''}`}>
-        {stats.map(s=>(<div key={s.label} className="flex items-center gap-1.5 border border-black p-2 bg-white"><span className={`text-base ${isResting?'opacity-50':''}`}>{s.icon}</span><div className="flex flex-col min-w-0"><span className={`text-[9px] uppercase tracking-wider ${isResting?'text-gray-400':'text-gray-500'}`}>{s.label}</span><span className={`font-bold ${s.done?'text-[#b22a27]':isResting?'text-gray-400':'text-black'}`}>{s.value}</span></div></div>))}
-      </div>
-    </article>
-  );
-}
+function MemberCard({member}){const pct=member.percentage||0;const done=pct>=100;const stats=[{icon:'📿',label:'Japa',val:done?'60m':'--'},{icon:'🧘',label:'AKY',val:`${member.completed||0}/${member.total||0}`},{icon:'🏃',label:'Exercise',val:done?'✅':'--'},{icon:'💧',label:'Water',val:done?'✅':'--'},{icon:'📖',label:'Study',val:done?'✅':'--'},{icon:'🪷',label:'Abhishekam',val:done?'✅':'--'}];return(<article className={`bg-surface woodcut-shadow border-4 border-primary p-6 relative ${!done?'opacity-80':''}`}><div className="absolute inset-0 halftone-bg opacity-5 pointer-events-none"/><div className="flex justify-between items-start mb-6 border-b border-outline pb-4 relative z-10"><div><h3 className="font-headline-sm text-headline-sm text-primary">{member.name||'Practitioner'}</h3><p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mt-1">{done?'Full Practice':'In Progress'}</p></div><span className={`font-label-sm text-label-sm uppercase tracking-widest px-3 py-1 border-2 ${done?'bg-primary text-on-primary border-primary':pct>0?'bg-secondary text-on-secondary border-secondary':'text-on-surface-variant border-outline-variant'}`}>{done?'Complete':pct>0?'Partial':'Awaiting'}</span></div><div className="flex items-center gap-6 mb-6 relative z-10"><div className="relative w-20 h-20"><svg className="w-full h-full -rotate-90" viewBox="0 0 100 100"><circle cx="50" cy="50" fill="none" r="42" stroke="#e5e2e1" strokeWidth="8"/><circle cx="50" cy="50" fill="none" r="42" stroke={done?'#000':'#b22a27'} strokeDasharray={`${(pct/100)*264} 264`} strokeWidth="8" strokeLinecap="square"/></svg><div className="absolute inset-0 flex items-center justify-center"><span className="font-headline-sm text-headline-sm text-primary">{pct}%</span></div></div><div className="flex-1 space-y-2">{stats.map(s=>(<div key={s.label} className="flex items-center justify-between text-sm"><span className="flex items-center gap-2 font-body-md text-body-md text-on-surface-variant"><span>{s.icon}</span> {s.label}</span><span className="font-label-sm text-label-sm font-bold text-primary">{s.val}</span></div>))}</div></div></article>);}

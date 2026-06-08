@@ -1,106 +1,28 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState,useEffect,useCallback } from 'react';
 import { api } from '../api';
 
-export default function ProgressScreen({ user }) {
-  const [stats, setStats] = useState(null);
-  const [loading, setLoading] = useState(true);
-  const [days, setDays] = useState(30);
+export default function ProgressScreen({user}){
+  const[stats,setStats]=useState(null);const[loading,setLoading]=useState(true);
+  const fetchStats=useCallback(async()=>{setLoading(true);try{const data=await api.getStats(30);setStats(data);}catch(err){}finally{setLoading(false);}},[]);
+  useEffect(()=>{fetchStats();},[fetchStats]);
+  if(loading)return(<div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"/></div>);
+  if(!stats)return null;
+  const currentStreak=stats.streak||0;const longestStreak=48;
+  const october=new Date();const monthName=october.toLocaleDateString('en-US',{month:'long'});
+  const monthDates=[];for(let i=29;i>=0;i--){const d=new Date(october);d.setDate(d.getDate()-i);monthDates.push(d);}
+  const dayMap={};(stats.dailyData||[]).forEach(day=>{dayMap[day.date]=day;});
 
-  const fetchStats = useCallback(async (d) => {
-    setLoading(true);
-    try { const data = await api.getStats(d); setStats(data); } catch (err) {}
-    finally { setLoading(false); }
-  }, []);
-
-  useEffect(() => { fetchStats(days); }, [days, fetchStats]);
-
-  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin"/></div>;
-  if (!stats) return null;
-
-  const currentStreak = stats.streak || 0;
-  const longestStreak = 48;
-  const today = new Date();
-  const monthDates = [];
-  for (let i=29;i>=0;i--) { const d=new Date(today); d.setDate(d.getDate()-i); monthDates.push(d); }
-  const dayMap={};
-  (stats.dailyData||[]).forEach(day=>{dayMap[day.date]=day;});
-
-  return (
-    <div className="max-w-4xl mx-auto">
-      <div className="space-y-8">
-        <JourneyHeader />
-        <div className="grid md:grid-cols-2 gap-4">
-          <StreakCards current={currentStreak} longest={longestStreak} />
-        </div>
-        <div className="card-woodcut p-6">
-          <div className="flex justify-between items-end mb-6 border-b border-black pb-2">
-            <h2 className="text-2xl font-display font-bold text-black">Consistency</h2>
-            <DaySelector days={days} setDays={setDays} />
-          </div>
-          <CalGrid monthDates={monthDates} dayMap={dayMap} today={today} />
-        </div>
-        <AveragesBars />
+  return(<div>
+    <div className="mb-12 border-b-4 border-primary pb-6 relative"><div className="absolute inset-0 halftone-bg opacity-10 -z-10"/><h2 className="font-headline-xl text-headline-xl text-primary mb-2">Progress</h2><p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest bg-black text-white inline-block px-3 py-1">{monthName} Cycle</p></div>
+    <div className="grid grid-cols-12 gap-gutter">
+      <div className="col-span-12 md:col-span-4 space-y-8">
+        <div className="bg-surface thin-border woodcut-shadow p-6 relative overflow-hidden group"><div className="absolute -right-8 -top-8 w-32 h-32 bg-secondary opacity-10 rounded-full blur-2xl group-hover:bg-secondary-container transition-all"/><h3 className="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant mb-4 border-b border-outline pb-2">Current Streak</h3><div className="flex items-baseline gap-2"><span className="font-headline-xl text-headline-xl text-primary tracking-tighter">{currentStreak}</span><span className="font-body-md text-body-md text-on-surface-variant font-bold">Days</span></div><div className="mt-4 flex gap-1">{Array.from({length:5}).map((_,i)=>(<div key={i} className={`h-2 flex-1 ${i<Math.min(3,Math.ceil(currentStreak/4))?'bg-primary':'bg-surface-variant'}`}/>))}</div><p className="font-label-sm text-label-sm text-on-surface-variant mt-3 opacity-70">Keep the fire burning.</p></div>
+        <div className="bg-surface-bright thin-border woodcut-shadow p-6 relative"><div className="absolute inset-0 halftone-bg opacity-5 mix-blend-multiply pointer-events-none"/><h3 className="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant mb-4 border-b border-outline pb-2">Longest Streak</h3><div className="flex items-baseline gap-2"><span className="font-headline-lg text-headline-lg text-secondary tracking-tighter">{longestStreak}</span><span className="font-body-md text-body-md text-on-surface-variant font-bold">Days</span></div><p className="font-label-sm text-label-sm text-on-surface-variant mt-4 opacity-70">Personal Best achieved in Aug.</p></div>
       </div>
-    </div>
-  );
-}
-
-function JourneyHeader() {
-  return (
-    <div className="flex flex-col gap-4 border-l-4 border-black pl-4">
-      <h1 className="text-4xl lg:text-5xl font-display font-bold text-black tracking-tight">My Journey</h1>
-      <p className="text-base text-gray-500 italic border-l-2 border-[#b22a27] pl-4 py-1">
-        &ldquo;The mind is restless and difficult to restrain, but it is subdued by practice.&rdquo;
-      </p>
-    </div>
-  );
-}
-
-function StreakCards({ current, longest }) {
-  return (<>
-    <div className="card-woodcut p-5 relative overflow-hidden group cursor-default col-span-1">
-      <div className="absolute inset-0 bg-[#b22a27] translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
-      <div className="relative z-10 flex flex-col justify-between h-full group-hover:text-white transition-colors duration-300">
-        <span className="text-xs uppercase tracking-wider text-gray-500 group-hover:text-white/80">Current Streak</span>
-        <div className="flex items-baseline gap-2 mt-4"><span className="text-5xl font-display font-bold">{current}</span><span className="text-base">days</span></div>
-      </div>
-    </div>
-    <div className="card-woodcut p-5 bg-black text-white relative overflow-hidden col-span-1">
-      <div className="absolute inset-0 bg-halftone opacity-40 mix-blend-overlay" />
-      <div className="relative z-10 flex flex-col justify-between h-full">
-        <span className="text-xs uppercase tracking-wider text-white/60">Longest Streak</span>
-        <div className="flex items-baseline gap-2 mt-4"><span className="text-5xl font-display font-bold text-[#b22a27]">{longest}</span><span className="text-base text-white/60">days</span></div>
-      </div>
-    </div>
-  </>);
-}
-
-function DaySelector({ days, setDays }) {
-  return (<div className="flex gap-1">{[7,14,30,60].map(d=><button key={d} onClick={()=>setDays(d)} className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border-2 border-black transition-all ${days===d?'bg-black text-white':'bg-white text-gray-500 hover:text-black'}`}>{d}D</button>)}</div>);
-}
-
-function CalGrid({ monthDates, dayMap, today }) {
-  const dayNames=['S','M','T','W','T','F','S'];
-  const firstDate=monthDates[0];
-  const leadingBlanks=firstDate.getDay();
-  return (<div>
-    <div className="grid grid-cols-7 gap-2">
-      {dayNames.map(d=><div key={d} className="text-center text-xs text-gray-500 font-bold py-0.5">{d}</div>)}
-      {Array.from({length:leadingBlanks}).map((_,i)=><div key={`l-${i}`} className="aspect-square"/>)}
-      {monthDates.map(d=>{const ds=d.toISOString().split('T')[0];const has=dayMap[ds];const pct=has?dayMap[ds].percentage:0;let bg='bg-white border border-gray-300';if(has&&pct>=100)bg='bg-black border border-black text-white';else if(has&&pct>=50)bg='bg-halftone border border-black';else if(has&&pct>0)bg='bg-gray-300 border border-black';return <div key={ds} className={`aspect-square flex items-center justify-center text-[11px] font-bold ${bg} ${d>today?'opacity-20':''}`}>{d.getDate()}</div>;})}
-    </div>
-    <div className="mt-3 flex gap-4 text-[10px] text-gray-500 justify-end">
-      <span className="flex items-center gap-1"><span className="w-3 h-3 border border-gray-300"/> Missed</span>
-      <span className="flex items-center gap-1"><span className="w-3 h-3 bg-halftone border border-black"/> Partial</span>
-      <span className="flex items-center gap-1"><span className="w-3 h-3 bg-black"/> Complete</span>
+      <div className="col-span-12 md:col-span-8"><div className="bg-surface stark-border woodcut-shadow p-8 h-full flex flex-col"><div className="flex justify-between items-end mb-8 border-b-4 border-primary pb-4"><h3 className="font-headline-md text-headline-md text-primary tracking-tight">{monthName} Consistency</h3><div className="flex items-center gap-4 font-label-sm text-label-sm"><div className="flex items-center gap-2"><div className="w-4 h-4 bg-primary"/>Completed</div><div className="flex items-center gap-2"><div className="w-4 h-4 bg-secondary"/>Partial</div><div className="flex items-center gap-2"><div className="w-4 h-4 border border-primary bg-surface"/>Missed</div></div></div><div className="grid grid-cols-7 gap-2 mb-6 flex-1">{['S','M','T','W','T','F','S'].map(d=>(<div key={d} className="text-center font-label-sm text-label-sm uppercase text-on-surface-variant py-2">{d}</div>))}{Array.from({length:monthDates[0].getDay()}).map((_,i)=>(<div key={`l-${i}`} className="aspect-square"/>))}{monthDates.map(d=>{const ds=d.toISOString().split('T')[0];const has=dayMap[ds];const pct=has?dayMap[ds].percentage:0;const isToday=d.toDateString()===new Date().toDateString();const isFuture=d>new Date();let cl='bg-surface thin-border flex items-center justify-center text-primary';if(has&&pct>=100)cl='bg-primary thin-border flex items-center justify-center text-white';else if(has&&pct>=50)cl='bg-secondary thin-border flex items-center justify-center text-white';if(isFuture)cl+=' opacity-50';return(<div key={ds} className={`aspect-square ${cl} font-label-sm text-label-sm hover:scale-105 transition-transform cursor-pointer relative group`}>{d.getDate()}{has&&pct>=50&&pct<100&&<div className="absolute inset-0 halftone-bg opacity-30 mix-blend-overlay pointer-events-none"/>}{isToday&&<div className="absolute -bottom-1 -right-1 w-3 h-3 bg-secondary border border-black rounded-full animate-pulse"/>}{has&&pct>=100&&<div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black text-white px-2 py-1 text-[10px] hidden group-hover:block whitespace-nowrap z-10">100% Completed</div>}</div>);})}</div></div></div>
+      <div className="col-span-12 mt-8"><div className="grid grid-cols-1 md:grid-cols-2 gap-gutter relative"><div className="absolute inset-0 halftone-bg opacity-5 -z-10 bg-surface-container"/><StatBlock label="30-Day Avg: Japa Rounds" value="14.2" unit="Rounds/Day" pct={85}/><StatBlock label="30-Day Avg: Atma Kriya" value="85%" unit="Completion" pct={85} accent/></div></div>
     </div>
   </div>);
 }
 
-function AveragesBars() {
-  const items=[{label:'Japa Mala',val:85},{label:'Atma Kriya Yoga',val:60,sec:true},{label:'Hydration',val:92}];
-  return (<div className="card-woodcut p-6 space-y-5">
-    <h3 className="text-sm font-display font-bold text-black pb-2 border-b-4 border-black inline-block">30-Day Averages</h3>
-    {items.map(it=>(<div key={it.label}><div className="flex justify-between text-[10px] mb-1 uppercase tracking-wide"><span className="font-bold">{it.label}</span><span className={it.sec?'text-[#b22a27]':'text-gray-500'}>{it.val}%</span></div><div className="h-4 w-full bg-white border border-black overflow-hidden"><div className={`h-full ${it.sec?'bg-halftone bg-black':'bg-black'}`} style={{width:`${it.val}%`}}/></div></div>))}
-  </div>);
-}
+function StatBlock({label,value,unit,pct,accent}){return(<div className="border-t-4 border-primary pt-6 pl-4 relative"><div className={`absolute left-0 top-0 bottom-0 w-1 ${accent?'bg-secondary':'bg-primary'}`}/><h4 className="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant mb-2">{label}</h4><div className="flex items-end gap-3"><span className={`font-headline-xl text-headline-xl leading-none ${accent?'text-secondary':'text-primary'}`}>{value}</span><span className="font-body-md text-body-md text-on-surface-variant mb-2 font-bold uppercase">{unit}</span></div><div className="w-full bg-surface-variant h-1 mt-4"><div className={`h-1 ${accent?'bg-secondary':'bg-primary'}`} style={{width:`${pct}%`}}/></div></div>);}
