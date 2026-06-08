@@ -1,17 +1,414 @@
-import { useState,useEffect,useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { useAuth } from '../context/AuthContext';
 
-export default function TeamScreen(){
-  const[team,setTeam]=useState(null);const[loading,setLoading]=useState(true);
-  const fetchTeam=useCallback(async()=>{try{const data=await api.getTeam();setTeam(data);}catch(err){}finally{setLoading(false);}},[]);
-  useEffect(()=>{fetchTeam();},[fetchTeam]);
-  if(loading)return(<div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"/></div>);
-  const members=team?.members||[];
+export default function TeamScreen() {
+  const { user } = useAuth();
+  const [team, setTeam] = useState(null);
+  const [requests, setRequests] = useState({ incoming: [], outgoing: [] });
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState('');
+  const [searchQuery, setSearchQuery] = useState('');
+  const [searchResults, setSearchResults] = useState([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState('');
+  const [actionId, setActionId] = useState(null);
 
-  return(<div>
-    <div className="mb-12 border-b-4 border-primary pb-6 relative"><div className="absolute inset-0 halftone-bg opacity-10 -z-10"/><h2 className="font-headline-xl text-headline-xl text-primary mb-2">Sangha</h2><p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest bg-black text-white inline-block px-3 py-1">{members.length} Practitioner{members.length!==1?'s':''}</p></div>
-    {members.length===0?(<div className="bg-surface border-4 border-primary woodcut-shadow p-12 text-center"><span className="material-symbols-outlined text-5xl text-outline mb-4">groups</span><p className="font-body-lg text-body-lg text-on-surface-variant">No sangha members yet. Invite fellow practitioners to walk the path together.</p></div>):(<div className="grid md:grid-cols-2 gap-8">{members.map(m=><MemberCard key={m.id} member={m}/>)}</div>)}
-  </div>);
+  const fetchAll = useCallback(async () => {
+    setLoading(true);
+    let teamError = '';
+
+    try {
+      const teamData = await api.getTeam();
+      setTeam(teamData);
+    } catch (err) {
+      teamError = err.message;
+      setTeam(null);
+    }
+
+    try {
+      const requestData = await api.getFriendRequests();
+      setRequests(requestData);
+    } catch {
+      setRequests({ incoming: [], outgoing: [] });
+    }
+
+    setError(teamError);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => { fetchAll(); }, [fetchAll]);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      setSearchError('');
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      setSearchError('');
+      try {
+        const data = await api.searchFriends(q);
+        setSearchResults(data.users || []);
+      } catch (err) {
+        setSearchError(err.message);
+        setSearchResults([]);
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSendRequest = async (userId) => {
+    setActionId(userId);
+    try {
+      await api.sendFriendRequest(userId);
+      const [requestData] = await Promise.all([api.getFriendRequests()]);
+      setRequests(requestData);
+      const data = await api.searchFriends(searchQuery.trim());
+      setSearchResults(data.users || []);
+      await fetchAll();
+    } catch (err) {
+      setSearchError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleAccept = async (requestId) => {
+    setActionId(requestId);
+    try {
+      await api.acceptFriendRequest(requestId);
+      await fetchAll();
+      if (searchQuery.trim().length >= 2) {
+        const data = await api.searchFriends(searchQuery.trim());
+        setSearchResults(data.users || []);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleDecline = async (requestId) => {
+    setActionId(requestId);
+    try {
+      await api.declineFriendRequest(requestId);
+      const requestData = await api.getFriendRequests();
+      setRequests(requestData);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleRemoveFriend = async (userId) => {
+    setActionId(userId);
+    try {
+      await api.removeFriend(userId);
+      await fetchAll();
+      if (searchQuery.trim().length >= 2) {
+        const data = await api.searchFriends(searchQuery.trim());
+        setSearchResults(data.users || []);
+      }
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex justify-center py-20">
+        <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
+      </div>
+    );
+  }
+
+  if (error && !team) {
+    return (
+      <div className="bg-surface border-4 border-primary woodcut-shadow p-8 text-center">
+        <p className="font-body-md text-body-md text-secondary mb-4">{error}</p>
+        <button onClick={fetchAll} className="btn-woodcut px-6 py-3">Retry</button>
+      </div>
+    );
+  }
+
+  const members = team?.members || [];
+  const friends = members.filter(m => m.id !== user?.id);
+  const incoming = requests.incoming || [];
+  const outgoing = requests.outgoing || [];
+
+  return (
+    <div className="space-y-10">
+      <div className="border-b-4 border-primary pb-6 relative">
+        <div className="absolute inset-0 halftone-bg opacity-10 -z-10" />
+        <h2 className="font-headline-xl text-headline-xl text-primary mb-2">Sangha</h2>
+        <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest bg-black text-white inline-block px-3 py-1">
+          {friends.length} Sangha member{friends.length !== 1 ? 's' : ''}
+        </p>
+      </div>
+
+      <section className="border-4 border-primary bg-surface woodcut-shadow p-6">
+        <h3 className="font-headline-sm text-headline-sm uppercase mb-1">Add to Sangha</h3>
+        <p className="font-body-md text-body-md text-on-surface-variant mb-4">
+          Search by name or email to find practitioners and send a request.
+        </p>
+
+        <div className="relative mb-4">
+          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+          <input
+            type="search"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+            placeholder="Search practitioners…"
+            className="w-full border-2 border-primary bg-surface-bright pl-10 pr-4 py-3 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
+          />
+        </div>
+
+        {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">Type at least 2 characters to search.</p>
+        )}
+
+        {searching && (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">Searching…</p>
+        )}
+
+        {searchError && (
+          <p className="font-label-sm text-label-sm text-secondary mb-3">{searchError}</p>
+        )}
+
+        {searchResults.length > 0 && (
+          <ul className="divide-y-2 divide-primary border-2 border-primary">
+            {searchResults.map(u => (
+              <li key={u.id} className="flex items-center justify-between gap-3 p-3 bg-surface-bright">
+                <div className="min-w-0">
+                  <p className="font-body-md text-body-md text-primary truncate">{u.name}</p>
+                  <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{u.email}</p>
+                </div>
+                <RelationButton
+                  relation={u.relation}
+                  loading={actionId === u.id}
+                  onRequest={() => handleSendRequest(u.id)}
+                />
+              </li>
+            ))}
+          </ul>
+        )}
+
+        {!searching && searchQuery.trim().length >= 2 && searchResults.length === 0 && !searchError && (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">No practitioners found.</p>
+        )}
+      </section>
+
+      {(incoming.length > 0 || outgoing.length > 0) && (
+        <section className="border-4 border-primary bg-surface woodcut-shadow p-6">
+          <h3 className="font-headline-sm text-headline-sm uppercase mb-4">Requests</h3>
+
+          {incoming.length > 0 && (
+            <div className="mb-6">
+              <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">Incoming</p>
+              <ul className="space-y-3">
+                {incoming.map(r => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
+                    <div className="min-w-0">
+                      <p className="font-body-md text-body-md text-primary truncate">{r.name}</p>
+                      <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{r.email}</p>
+                    </div>
+                    <div className="flex gap-2 shrink-0">
+                      <button
+                        type="button"
+                        disabled={actionId === r.id}
+                        onClick={() => handleAccept(r.id)}
+                        className="border-2 border-primary bg-primary text-on-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50"
+                      >
+                        Accept
+                      </button>
+                      <button
+                        type="button"
+                        disabled={actionId === r.id}
+                        onClick={() => handleDecline(r.id)}
+                        className="border-2 border-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-surface-variant transition-colors disabled:opacity-50"
+                      >
+                        Decline
+                      </button>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+
+          {outgoing.length > 0 && (
+            <div>
+              <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">Sent</p>
+              <ul className="space-y-3">
+                {outgoing.map(r => (
+                  <li key={r.id} className="flex items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
+                    <div className="min-w-0">
+                      <p className="font-body-md text-body-md text-primary truncate">{r.name}</p>
+                      <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{r.email}</p>
+                    </div>
+                    <span className="font-label-sm text-label-sm uppercase text-on-surface-variant border-2 border-outline-variant px-3 py-1.5 shrink-0">
+                      Pending
+                    </span>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </section>
+      )}
+
+      <section>
+        <h3 className="font-headline-sm text-headline-sm uppercase mb-4">Today&apos;s Practice</h3>
+
+        {members.length === 0 ? (
+          <div className="bg-surface border-4 border-primary woodcut-shadow p-12 text-center">
+            <span className="material-symbols-outlined text-5xl text-outline mb-4">groups</span>
+            <p className="font-body-lg text-body-lg text-on-surface-variant">
+              No sangha members yet. Search above to add fellow practitioners.
+            </p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-8">
+            {members.map(m => (
+              <MemberCard
+                key={m.id}
+                member={m}
+                isSelf={m.id === user?.id}
+                removing={actionId === m.id}
+                onRemove={handleRemoveFriend}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+    </div>
+  );
 }
 
-function MemberCard({member}){const pct=member.percentage||0;const done=pct>=100;const stats=[{icon:'📿',label:'Japa',val:done?'60m':'--'},{icon:'🧘',label:'AKY',val:`${member.completed||0}/${member.total||0}`},{icon:'🏃',label:'Exercise',val:done?'✅':'--'},{icon:'💧',label:'Water',val:done?'✅':'--'},{icon:'📖',label:'Study',val:done?'✅':'--'},{icon:'🪷',label:'Abhishekam',val:done?'✅':'--'}];return(<article className={`bg-surface woodcut-shadow border-4 border-primary p-6 relative ${!done?'opacity-80':''}`}><div className="absolute inset-0 halftone-bg opacity-5 pointer-events-none"/><div className="flex justify-between items-start mb-6 border-b border-outline pb-4 relative z-10"><div><h3 className="font-headline-sm text-headline-sm text-primary">{member.name||'Practitioner'}</h3><p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mt-1">{done?'Full Practice':'In Progress'}</p></div><span className={`font-label-sm text-label-sm uppercase tracking-widest px-3 py-1 border-2 ${done?'bg-primary text-on-primary border-primary':pct>0?'bg-secondary text-on-secondary border-secondary':'text-on-surface-variant border-outline-variant'}`}>{done?'Complete':pct>0?'Partial':'Awaiting'}</span></div><div className="flex items-center gap-6 mb-6 relative z-10"><div className="relative w-20 h-20"><svg className="w-full h-full -rotate-90" viewBox="0 0 100 100"><circle cx="50" cy="50" fill="none" r="42" stroke="#e5e2e1" strokeWidth="8"/><circle cx="50" cy="50" fill="none" r="42" stroke={done?'#000':'#b22a27'} strokeDasharray={`${(pct/100)*264} 264`} strokeWidth="8" strokeLinecap="square"/></svg><div className="absolute inset-0 flex items-center justify-center"><span className="font-headline-sm text-headline-sm text-primary">{pct}%</span></div></div><div className="flex-1 space-y-2">{stats.map(s=>(<div key={s.label} className="flex items-center justify-between text-sm"><span className="flex items-center gap-2 font-body-md text-body-md text-on-surface-variant"><span>{s.icon}</span> {s.label}</span><span className="font-label-sm text-label-sm font-bold text-primary">{s.val}</span></div>))}</div></div></article>);}
+function RelationButton({ relation, loading, onRequest }) {
+  if (relation === 'friend') {
+    return (
+      <span className="font-label-sm text-label-sm uppercase text-[#15803d] border-2 border-[#15803d] px-3 py-1.5 shrink-0">
+        In Sangha
+      </span>
+    );
+  }
+  if (relation === 'pending_outgoing') {
+    return (
+      <span className="font-label-sm text-label-sm uppercase text-on-surface-variant border-2 border-outline-variant px-3 py-1.5 shrink-0">
+        Pending
+      </span>
+    );
+  }
+  if (relation === 'pending_incoming') {
+    return (
+      <span className="font-label-sm text-label-sm uppercase text-secondary border-2 border-secondary px-3 py-1.5 shrink-0">
+        Wants to join
+      </span>
+    );
+  }
+  return (
+    <button
+      type="button"
+      disabled={loading}
+      onClick={onRequest}
+      className="border-2 border-primary bg-primary text-on-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors shrink-0 disabled:opacity-50"
+    >
+      {loading ? '…' : 'Request'}
+    </button>
+  );
+}
+
+function MemberCard({ member, isSelf, removing, onRemove }) {
+  const pct = member.percentage || 0;
+  const done = pct >= 100;
+  const quickItems = (member.items || []).filter(i => (i.category || '').toLowerCase() === 'quick');
+
+  const stats = [
+    { icon: '📿', label: 'Japa', val: member.japaDone ? '60m' : '--' },
+    { icon: '🧘', label: 'AKY', val: `${member.akyDone || 0}/${member.akyTotal || 0}` },
+  ];
+
+  for (const item of quickItems) {
+    stats.push({
+      icon: item.name === 'Water' ? '💧' : item.name === 'Study' ? '📖' : item.name === 'Abhishekam' ? '🪷' : '🏃',
+      label: item.name,
+      val: item.completed ? '✅' : '--',
+    });
+  }
+
+  return (
+    <article className={`bg-surface woodcut-shadow border-4 border-primary p-6 relative ${!done ? 'opacity-80' : ''}`}>
+      <div className="absolute inset-0 halftone-bg opacity-5 pointer-events-none" />
+      <div className="flex justify-between items-start mb-6 border-b border-outline pb-4 relative z-10">
+        <div>
+          <h3 className="font-headline-sm text-headline-sm text-primary">
+            {member.name || 'Practitioner'}
+            {isSelf && (
+              <span className="font-label-sm text-label-sm text-on-surface-variant normal-case ml-2">(You)</span>
+            )}
+          </h3>
+          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mt-1">
+            {done ? 'Full Practice' : 'In Progress'}
+          </p>
+        </div>
+        <span className={`font-label-sm text-label-sm uppercase tracking-widest px-3 py-1 border-2 ${
+          done ? 'bg-primary text-on-primary border-primary'
+            : pct > 0 ? 'bg-secondary text-on-secondary border-secondary'
+              : 'text-on-surface-variant border-outline-variant'
+        }`}>
+          {done ? 'Complete' : pct > 0 ? 'Partial' : 'Awaiting'}
+        </span>
+      </div>
+      <div className="flex items-center gap-6 mb-6 relative z-10">
+        <div className="relative w-20 h-20">
+          <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
+            <circle cx="50" cy="50" fill="none" r="42" stroke="#e5e2e1" strokeWidth="8" />
+            <circle
+              cx="50" cy="50" fill="none" r="42"
+              stroke={done ? '#000' : '#b22a27'}
+              strokeDasharray={`${(pct / 100) * 264} 264`}
+              strokeWidth="8"
+              strokeLinecap="square"
+            />
+          </svg>
+          <div className="absolute inset-0 flex items-center justify-center">
+            <span className="font-headline-sm text-headline-sm text-primary">{pct}%</span>
+          </div>
+        </div>
+        <div className="flex-1 space-y-2">
+          {stats.map(s => (
+            <div key={s.label} className="flex items-center justify-between text-sm">
+              <span className="flex items-center gap-2 font-body-md text-body-md text-on-surface-variant">
+                <span>{s.icon}</span> {s.label}
+              </span>
+              <span className="font-label-sm text-label-sm font-bold text-primary">{s.val}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+      {!isSelf && (
+        <button
+          type="button"
+          disabled={removing}
+          onClick={() => onRemove(member.id)}
+          className="relative z-10 w-full mt-2 border-2 border-primary py-2.5 font-label-sm text-label-sm uppercase flex items-center justify-center gap-2 hover:bg-secondary hover:text-on-secondary hover:border-secondary transition-colors disabled:opacity-50"
+        >
+          <span className="material-symbols-outlined text-lg">person_remove</span>
+          {removing ? 'Removing…' : 'Remove from Sangha'}
+        </button>
+      )}
+    </article>
+  );
+}

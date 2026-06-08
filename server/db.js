@@ -1,4 +1,4 @@
-const { createClient } = require('@libsql/client/http');
+const path = require('path');
 const { v4: uuidv4 } = require('uuid');
 
 const TURSO_URL = process.env.TURSO_DATABASE_URL;
@@ -8,10 +8,15 @@ let db;
 
 function getDb() {
   if (!db) {
-    if (!TURSO_URL || !TURSO_TOKEN) {
-      throw new Error('TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in environment');
+    if (TURSO_URL && TURSO_TOKEN) {
+      const { createClient } = require('@libsql/client/http');
+      db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
+    } else {
+      const { createClient } = require('@libsql/client');
+      const dbPath = path.join(__dirname, 'data', 'sadhana.db');
+      db = createClient({ url: `file:${dbPath}` });
+      console.log(`Local dev mode — using SQLite at ${dbPath}`);
     }
-    db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
   }
   return db;
 }
@@ -57,8 +62,21 @@ async function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
     )`,
+    `CREATE TABLE IF NOT EXISTS friend_requests (
+      id TEXT PRIMARY KEY,
+      requester_id TEXT NOT NULL,
+      recipient_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (requester_id) REFERENCES users(id),
+      FOREIGN KEY (recipient_id) REFERENCES users(id),
+      UNIQUE(requester_id, recipient_id)
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_daily_progress_user_date ON daily_progress(user_id, date)`,
     `CREATE INDEX IF NOT EXISTS idx_daily_progress_date ON daily_progress(date)`,
+    `CREATE INDEX IF NOT EXISTS idx_friend_requests_recipient ON friend_requests(recipient_id, status)`,
+    `CREATE INDEX IF NOT EXISTS idx_friend_requests_requester ON friend_requests(requester_id, status)`,
   ];
 
   for (const sql of ddl) {

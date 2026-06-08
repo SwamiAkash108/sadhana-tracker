@@ -1,3 +1,4 @@
+require('dotenv').config();
 const express = require('express');
 const cors = require('cors');
 const path = require('path');
@@ -26,6 +27,10 @@ app.get('/api/health', async (req, res) => {
   } catch (err) {
     res.status(503).json({ status: 'error', db: 'disconnected', error: err.message });
   }
+});
+
+app.use('/api', (req, res) => {
+  res.status(404).json({ error: 'API route not found.' });
 });
 
 const clientDist = path.join(__dirname, '..', 'client', 'dist');

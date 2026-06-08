@@ -27,8 +27,15 @@ export const api = {
   getToday: () => request('/sadhana/today'),
   toggleItem: (itemId) => request('/sadhana/toggle', { method: 'POST', body: JSON.stringify({ item_id: itemId }) }),
   getStats: (days = 30) => request(`/sadhana/stats?days=${days}`),
+  getMonthStats: (year, month) => request(`/sadhana/stats/month?year=${year}&month=${month}`),
   getTeam: () => request('/sadhana/team'),
   getUserHistory: (userId, days = 7) => request(`/sadhana/history/${userId}?days=${days}`),
+  searchFriends: (q) => request(`/sadhana/friends/search?q=${encodeURIComponent(q)}`),
+  getFriendRequests: () => request('/sadhana/friends/requests'),
+  sendFriendRequest: (userId) => request('/sadhana/friends/request', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  acceptFriendRequest: (requestId) => request('/sadhana/friends/accept', { method: 'POST', body: JSON.stringify({ request_id: requestId }) }),
+  declineFriendRequest: (requestId) => request('/sadhana/friends/decline', { method: 'POST', body: JSON.stringify({ request_id: requestId }) }),
+  removeFriend: (userId) => request('/sadhana/friends/remove', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
 
   // Notifications
   getVapidKey: () => request('/notifications/vapid-public-key'),
