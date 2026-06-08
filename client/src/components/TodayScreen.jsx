@@ -186,45 +186,107 @@ function RatingCard() {
   );
 }
 
+/* =========== JAPA =========== */
+
 function JapaCard({ item }) {
+  const GOAL_MIN = 60;
+  const [elapsed, setElapsed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sadhana_japa_timer') || '{}').elapsed || 0; } catch { return 0; }
+  });
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      setElapsed(prev => {
+        const next = prev + 1;
+        localStorage.setItem('sadhana_japa_timer', JSON.stringify({ elapsed: next }));
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  const elapsedMin = Math.floor(elapsed / 60);
+  const pct = Math.min(100, Math.round((elapsedMin / GOAL_MIN) * 100));
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+
   return (
     <div className="card-wood p-5">
       <div className="flex items-center justify-between">
         <div>
           <p className="text-xs font-display font-bold text-ink uppercase tracking-wide">Japa Meditation</p>
-          <p className="text-[10px] text-mute">Daily Practice</p>
+          <p className="text-[10px] text-mute">Chanting the Divine Names</p>
         </div>
         <div className="w-20 h-20 relative">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 80 80">
             <circle cx="40" cy="40" r="34" fill="none" stroke="#D4D4D0" strokeWidth="6" />
             <circle cx="40" cy="40" r="34" fill="none" stroke="#C4633A" strokeWidth="6"
-              strokeDasharray="143 204.2" strokeLinecap="round" />
+              strokeDasharray={`${(pct / 100) * 2 * Math.PI * 34} ${2 * Math.PI * 34}`} strokeLinecap="round" />
           </svg>
           <div className="absolute inset-0 flex flex-col items-center justify-center">
-            <JapaTimer />
+            <span className="text-xs font-display font-black text-ink leading-none tabular-nums">
+              {mins}:{secs.toString().padStart(2, '0')}
+            </span>
           </div>
         </div>
       </div>
       <div className="mt-3 flex items-center justify-between text-[9px] text-mute font-medium">
-        <span>0 min</span>
-        <span>Goal: 60 min</span>
+        <span>{elapsedMin} min</span>
+        <span>Goal: {GOAL_MIN} min</span>
       </div>
+      <button
+        onClick={() => setRunning(!running)}
+        className={`mt-2 w-full text-[10px] font-bold uppercase tracking-widest px-3 py-1.5 rounded border-2 transition-all ${
+          running ? 'bg-ink text-paper border-ink' : 'bg-rust text-paper border-ink'
+        }`}
+      >
+        {running ? 'Pause' : elapsed > 0 ? 'Resume' : 'Begin'}
+      </button>
     </div>
   );
 }
 
 function JapaRingCard({ item }) {
+  const GOAL_MIN = 60;
+  const [elapsed, setElapsed] = useState(() => {
+    try { return JSON.parse(localStorage.getItem('sadhana_japa_timer') || '{}').elapsed || 0; } catch { return 0; }
+  });
+  const [running, setRunning] = useState(false);
+
+  useEffect(() => {
+    if (!running) return;
+    const id = setInterval(() => {
+      setElapsed(prev => {
+        const next = prev + 1;
+        localStorage.setItem('sadhana_japa_timer', JSON.stringify({ elapsed: next }));
+        return next;
+      });
+    }, 1000);
+    return () => clearInterval(id);
+  }, [running]);
+
+  const elapsedMin = Math.floor(elapsed / 60);
+  const pct = Math.min(100, Math.round((elapsedMin / GOAL_MIN) * 100));
+  const mins = Math.floor(elapsed / 60);
+  const secs = elapsed % 60;
+  const circumference = 2 * Math.PI * 80;
+  const dash = (pct / 100) * circumference;
+
   return (
     <div className="flex items-center gap-8">
       <div className="w-44 h-44 relative shrink-0">
         <svg className="w-full h-full -rotate-90" viewBox="0 0 180 180">
           <circle cx="90" cy="90" r="80" fill="none" stroke="#D4D4D0" strokeWidth="10" />
           <circle cx="90" cy="90" r="80" fill="none" stroke="#1A1A1A" strokeWidth="10"
-            strokeDasharray="352 503" strokeLinecap="round" />
+            strokeDasharray={`${dash} ${circumference - dash}`} strokeLinecap="round" />
         </svg>
         <div className="absolute inset-0 flex flex-col items-center justify-center">
-          <span className="text-4xl font-display font-black text-ink leading-none">42</span>
-          <span className="text-[11px] text-mute uppercase tracking-widest font-bold mt-1">/ 108 Rounds</span>
+          <span className="text-3xl font-display font-black text-ink leading-none tabular-nums">
+            {mins}:{secs.toString().padStart(2, '0')}
+          </span>
+          <span className="text-[10px] text-mute uppercase tracking-widest font-bold mt-1">/ {GOAL_MIN} min</span>
         </div>
       </div>
       <div className="flex-1 space-y-3">
@@ -233,62 +295,24 @@ function JapaRingCard({ item }) {
           <p className="text-[10px] text-mute uppercase tracking-wider">Chanting the Divine Names</p>
         </div>
         <div className="bar-wood">
-          <div className="bar-wood-fill rust" style={{ width: '39%' }} />
+          <div className="bar-wood-fill rust" style={{ width: `${pct}%` }} />
         </div>
         <div className="flex items-center justify-between text-[9px] text-mute font-medium">
-          <span>42 / 108 rounds</span>
-          <span>39%</span>
+          <span>{elapsedMin} / {GOAL_MIN} min</span>
+          <span>{pct}%</span>
         </div>
-        <button className="btn-wood w-full flex items-center justify-center gap-2 text-[11px]">
-          Resume →
+        <button
+          onClick={() => setRunning(!running)}
+          className={`btn-wood w-full flex items-center justify-center gap-2 text-[11px] ${running ? '!bg-ink !text-paper' : ''}`}
+        >
+          {running ? 'Pause' : elapsed > 0 ? 'Resume' : 'Begin'} →
         </button>
       </div>
     </div>
   );
 }
 
-function JapaTimer() {
-  const STORAGE_KEY = 'sadhana_japa_timer';
-  const getStored = () => {
-    try { return JSON.parse(localStorage.getItem(STORAGE_KEY) || '{}'); } catch { return {}; }
-  };
-  const stored = getStored();
-  const [elapsed, setElapsed] = useState(stored.elapsed || 0);
-  const [running, setRunning] = useState(false);
-
-  useEffect(() => {
-    if (!running) return;
-    const id = setInterval(() => {
-      setElapsed(prev => {
-        const next = prev + 1;
-        localStorage.setItem(STORAGE_KEY, JSON.stringify({ elapsed: next }));
-        return next;
-      });
-    }, 1000);
-    return () => clearInterval(id);
-  }, [running]);
-
-  const mins = Math.floor(elapsed / 60);
-  const secs = elapsed % 60;
-
-  return (
-    <div className="text-center">
-      <span className="text-lg font-display font-black text-ink leading-none">
-        {mins}:{secs.toString().padStart(2, '0')}
-      </span>
-      <button
-        onClick={() => setRunning(!running)}
-        className={`block mx-auto mt-1 text-[8px] font-bold uppercase tracking-widest px-3 py-1 border-2 transition-all ${
-          running
-            ? 'bg-ink text-paper border-ink'
-            : 'bg-rust text-paper border-ink'
-        }`}
-      >
-        {running ? 'Pause' : 'Resume'}
-      </button>
-    </div>
-  );
-}
+/* =========== AKY =========== */
 
 function AkySummaryCard({ items, onClick }) {
   const done = items.filter(i => i.completed).length;
@@ -311,12 +335,14 @@ function AkySummaryCard({ items, onClick }) {
   );
 }
 
+/* =========== QUICK LOGS =========== */
+
 function QuickLogs({ items, onToggle }) {
   const logs = items.length > 0 ? items : [
-    { id: 'exercise', name: 'Exercise', completed: false, icon: DumbbellIcon },
-    { id: 'water', name: 'Water', completed: false, icon: WaterIcon },
-    { id: 'study', name: 'Study', completed: false, icon: BookIcon },
-    { id: 'abhishekam', name: 'Abhishekam', completed: false, icon: LotusIcon },
+    { id: 'exercise', name: 'Exercise', completed: false },
+    { id: 'water', name: 'Water', completed: false },
+    { id: 'study', name: 'Study', completed: false },
+    { id: 'abhishekam', name: 'Abhishekam', completed: false },
   ];
 
   return (
@@ -325,41 +351,29 @@ function QuickLogs({ items, onToggle }) {
         <span className="text-[11px] font-bold uppercase tracking-widest">Quick Logs</span>
       </div>
       <div className="divide-y-2 divide-ink">
-        {logs.map(item => {
-          const completed = item.completed;
-          const Icon = item.icon || (() => null);
-          return (
-            <button
-              key={item.id}
-              onClick={() => onToggle(item.id)}
-              className={`w-full flex items-center justify-between px-5 py-4 hover:bg-paper-dark/50 transition-colors ${
-                completed ? 'opacity-60' : ''
-              }`}
-            >
-              <div className="flex items-center gap-3">
-                <span className="text-mute"><Icon /></span>
-                <span className={`text-sm font-medium ${completed ? 'line-through text-mute' : 'text-ink'}`}>
-                  {item.name}
-                </span>
-              </div>
-              <div className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${
-                completed ? 'bg-sage border-sage' : 'border-stone-dark'
-              }`}>
-                {completed && (
-                  <svg className="w-3 h-3 text-paper animate-check-pop" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="square">
-                    <path d="M5 13l4 4L19 7" />
-                  </svg>
-                )}
-              </div>
-            </button>
-          );
-        })}
+        {logs.map(item => (
+          <button
+            key={item.id}
+            onClick={() => onToggle(item.id)}
+            className={`w-full flex items-center justify-between px-5 py-4 hover:bg-paper-dark/50 transition-colors ${
+              item.completed ? 'opacity-60' : ''
+            }`}
+          >
+            <span className={`text-sm font-medium ${item.completed ? 'line-through text-mute' : 'text-ink'}`}>
+              {item.name}
+            </span>
+            <div className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${
+              item.completed ? 'bg-sage border-sage' : 'border-stone-dark'
+            }`}>
+              {item.completed && (
+                <svg className="w-3 h-3 text-paper animate-check-pop" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="square">
+                  <path d="M5 13l4 4L19 7" />
+                </svg>
+              )}
+            </div>
+          </button>
+        ))}
       </div>
     </div>
   );
 }
-
-function DumbbellIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M5 12h14"/><circle cx="12" cy="7" r="4"/><circle cx="12" cy="17" r="4"/></svg>; }
-function WaterIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 2C10 6 6 8.5 6 12a6 6 0 0012 0C18 8.5 14 6 12 2z"/></svg>; }
-function BookIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>; }
-function LotusIcon() { return <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round"><path d="M12 3c-3 4-3 10 0 18 3-8 3-14 0-18z"/></svg>; }
