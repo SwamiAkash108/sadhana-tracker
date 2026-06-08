@@ -1,25 +1,24 @@
-const Database = require('better-sqlite3');
-const path = require('path');
+const { createClient } = require('@libsql/client');
 const { v4: uuidv4 } = require('uuid');
 
-const DB_PATH = process.env.DATA_DIR
-  ? path.join(process.env.DATA_DIR, 'sadhana.db')
-  : path.join(__dirname, 'sadhana.db');
+const TURSO_URL = process.env.TURSO_DATABASE_URL;
+const TURSO_TOKEN = process.env.TURSO_AUTH_TOKEN;
 
 let db;
 
 function getDb() {
   if (!db) {
-    db = new Database(DB_PATH);
-    db.pragma('journal_mode = WAL');
-    db.pragma('foreign_keys = ON');
-    initSchema();
+    if (!TURSO_URL || !TURSO_TOKEN) {
+      throw new Error('TURSO_DATABASE_URL and TURSO_AUTH_TOKEN must be set in environment');
+    }
+    db = createClient({ url: TURSO_URL, authToken: TURSO_TOKEN });
   }
   return db;
 }
 
-function initSchema() {
-  db.exec(`
+async function initSchema() {
+  const client = getDb();
+  await client.executeMultiple(`
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -27,6 +26,7 @@ function initSchema() {
       password_hash TEXT NOT NULL,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
     CREATE TABLE IF NOT EXISTS sadhana_items (
       id TEXT PRIMARY KEY,
       name TEXT NOT NULL,
@@ -40,6 +40,7 @@ function initSchema() {
       am_pm INTEGER DEFAULT 0,
       created_at TEXT DEFAULT (datetime('now'))
     );
+
     CREATE TABLE IF NOT EXISTS daily_progress (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -51,6 +52,7 @@ function initSchema() {
       FOREIGN KEY (item_id) REFERENCES sadhana_items(id),
       UNIQUE(user_id, item_id, date)
     );
+
     CREATE TABLE IF NOT EXISTS push_subscriptions (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -58,12 +60,14 @@ function initSchema() {
       created_at TEXT DEFAULT (datetime('now')),
       FOREIGN KEY (user_id) REFERENCES users(id)
     );
+
     CREATE INDEX IF NOT EXISTS idx_daily_progress_user_date ON daily_progress(user_id, date);
     CREATE INDEX IF NOT EXISTS idx_daily_progress_date ON daily_progress(date);
   `);
 
-  const count = db.prepare('SELECT COUNT(*) as cnt FROM sadhana_items').get();
-  if (count.cnt === 0) {
+  const result = await client.execute('SELECT COUNT(*) as cnt FROM sadhana_items');
+  const count = result.rows[0].cnt;
+  if (count === 0) {
     const defaults = [
       { name: 'Suka Purvaka', description: 'Easy breathing — 20 rounds', emoji: '🌬️', sort_order: 1, category: 'pranayama', type: 'counter', target: 20 },
       { name: 'Nadhi Shuddhi', description: 'Alternate nostril cleansing', emoji: '🫧', sort_order: 2, category: 'pranayama', type: 'counter', target: 20 },
@@ -84,14 +88,12 @@ function initSchema() {
       { name: 'Abhishekam', description: 'Sacred bathing ritual', emoji: '🪷', sort_order: 17, category: 'quick', type: 'toggle' },
     ];
 
-    const insert = db.prepare('INSERT INTO sadhana_items (id, name, description, emoji, sort_order, category, item_type, target, am_pm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)');
-    const insertMany = db.transaction((items) => {
-      for (const item of items) {
-        insert.run(uuidv4(), item.name, item.description, item.emoji, item.sort_order, item.category, item.type, item.target || 0, item.am_pm ? 1 : 0);
-      }
-    });
-    insertMany(defaults);
+    const stmts = defaults.map(item => ({
+      sql: 'INSERT INTO sadhana_items (id, name, description, emoji, sort_order, category, item_type, target, am_pm) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+      args: [uuidv4(), item.name, item.description, item.emoji, item.sort_order, item.category, item.type, item.target || 0, item.am_pm ? 1 : 0],
+    }));
+    await client.batch(stmts);
   }
 }
 
-module.exports = { getDb };
+module.exports = { getDb, initSchema };

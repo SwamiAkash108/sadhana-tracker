@@ -3,15 +3,13 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { getDb } = require('./db');
+const { getDb, initSchema } = require('./db');
 
 const app = express();
 const PORT = process.env.PORT || 3001;
 
 app.use(cors());
 app.use(express.json());
-
-getDb();
 
 const auth = require('./routes/auth');
 const sadhana = require('./routes/sadhana');
@@ -21,8 +19,14 @@ app.use('/api/auth', auth.router);
 app.use('/api/sadhana', sadhana);
 app.use('/api/notifications', notifications);
 
-app.get('/api/health', (req, res) => {
-  res.json({ status: 'ok', timestamp: new Date().toISOString() });
+app.get('/api/health', async (req, res) => {
+  try {
+    const db = getDb();
+    await db.execute('SELECT 1');
+    res.json({ status: 'ok', db: 'connected', timestamp: new Date().toISOString() });
+  } catch (err) {
+    res.status(503).json({ status: 'error', db: 'disconnected', error: err.message });
+  }
 });
 
 const clientDist = path.join(__dirname, '..', 'client', 'dist');
@@ -33,14 +37,18 @@ if (fs.existsSync(clientDist)) {
       res.sendFile(path.join(clientDist, 'index.html'));
     }
   });
-  console.log('Serving static frontend from', clientDist);
-} else {
-  console.log('Frontend not built yet.');
-  app.get('/', (req, res) => {
-    res.json({ message: 'Sadhana Tracker API running. Build frontend for full app.' });
-  });
 }
 
-app.listen(PORT, () => {
-  console.log(`Sadhana Tracker server running on port ${PORT}`);
-});
+(async () => {
+  try {
+    await initSchema();
+    console.log('Database initialized.');
+  } catch (err) {
+    console.error('Database init failed:', err.message);
+    process.exit(1);
+  }
+
+  app.listen(PORT, () => {
+    console.log(`Sadhana Tracker running on port ${PORT}`);
+  });
+})();
