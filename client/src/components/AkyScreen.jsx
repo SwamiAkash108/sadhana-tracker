@@ -223,8 +223,8 @@ function ItemCard({ item, date, sessionLevel, onCounterChange, onDoneSession }) 
   const borderClass = accent ? 'border-2' : 'border';
   const borderStyle = accent ? { borderColor: accent } : undefined;
   const hasCounter = type === 'counter' || type === 'timer';
-  const displayCount = Math.min(getCounterDisplay(item, count), maxDisplay);
   const maxDisplay = getCounterMaxDisplay(item);
+  const displayCount = Math.min(getCounterDisplay(item, count), maxDisplay);
   const atMin = count <= 0;
   const atMax = count >= getCounterMax(item);
   const minusDelta = type === 'timer' ? -60 : -1;

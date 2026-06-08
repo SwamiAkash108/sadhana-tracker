@@ -339,24 +339,23 @@ function ExerciseTracker({ date, completed, onGoalChange }) {
     if (!date) return;
     const state = getExerciseState(date);
     setElapsed(state.elapsed);
-    setRunning(state.running && state.elapsed < EXERCISE_GOAL_SEC);
+    setRunning(state.running);
     setPushups(state.pushups);
     syncedRef.current = completed;
   }, [date, completed]);
 
   useEffect(() => {
-    if (!running || !date || goalReached) return;
+    if (!running || !date) return;
     const id = setInterval(() => {
       setElapsed(prev => {
-        const next = Math.min(prev + 1, EXERCISE_GOAL_SEC);
+        const next = prev + 1;
         const state = getExerciseState(date);
-        setExerciseState(date, next, next < EXERCISE_GOAL_SEC, state.pushups);
-        if (next >= EXERCISE_GOAL_SEC) setRunning(false);
+        setExerciseState(date, next, true, state.pushups);
         return next;
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [running, date, goalReached]);
+  }, [running, date]);
 
   useEffect(() => {
     if (!date) return;

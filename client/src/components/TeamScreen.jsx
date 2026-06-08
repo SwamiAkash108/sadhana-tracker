@@ -13,6 +13,7 @@ export default function TeamScreen() {
   const [searching, setSearching] = useState(false);
   const [searchError, setSearchError] = useState('');
   const [actionId, setActionId] = useState(null);
+  const [requestsError, setRequestsError] = useState('');
 
   const fetchAll = useCallback(async () => {
     setLoading(true);
@@ -29,8 +30,10 @@ export default function TeamScreen() {
     try {
       const requestData = await api.getFriendRequests();
       setRequests(requestData);
-    } catch {
+      setRequestsError('');
+    } catch (err) {
       setRequests({ incoming: [], outgoing: [] });
+      setRequestsError(err.message);
     }
 
     setError(teamError);
@@ -146,6 +149,8 @@ export default function TeamScreen() {
   const friends = members.filter(m => m.id !== user?.id);
   const incoming = requests.incoming || [];
   const outgoing = requests.outgoing || [];
+  const pendingCount = incoming.length + outgoing.length;
+  const incomingByUserId = Object.fromEntries(incoming.map(r => [r.user_id, r.id]));
 
   return (
     <div className="space-y-10">
@@ -196,8 +201,11 @@ export default function TeamScreen() {
                 </div>
                 <RelationButton
                   relation={u.relation}
-                  loading={actionId === u.id}
+                  loading={actionId === u.id || actionId === incomingByUserId[u.id]}
+                  requestId={incomingByUserId[u.id]}
                   onRequest={() => handleSendRequest(u.id)}
+                  onAccept={(id) => handleAccept(id)}
+                  onDecline={(id) => handleDecline(id)}
                 />
               </li>
             ))}
@@ -209,64 +217,85 @@ export default function TeamScreen() {
         )}
       </section>
 
-      {(incoming.length > 0 || outgoing.length > 0) && (
-        <section className="border-4 border-primary bg-surface woodcut-shadow p-6">
-          <h3 className="font-headline-sm text-headline-sm uppercase mb-4">Requests</h3>
-
-          {incoming.length > 0 && (
-            <div className="mb-6">
-              <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">Incoming</p>
-              <ul className="space-y-3">
-                {incoming.map(r => (
-                  <li key={r.id} className="flex items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
-                    <div className="min-w-0">
-                      <p className="font-body-md text-body-md text-primary truncate">{r.name}</p>
-                      <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{r.email}</p>
-                    </div>
-                    <div className="flex gap-2 shrink-0">
-                      <button
-                        type="button"
-                        disabled={actionId === r.id}
-                        onClick={() => handleAccept(r.id)}
-                        className="border-2 border-primary bg-primary text-on-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50"
-                      >
-                        Accept
-                      </button>
-                      <button
-                        type="button"
-                        disabled={actionId === r.id}
-                        onClick={() => handleDecline(r.id)}
-                        className="border-2 border-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-surface-variant transition-colors disabled:opacity-50"
-                      >
-                        Decline
-                      </button>
-                    </div>
-                  </li>
-                ))}
-              </ul>
-            </div>
+      <section className="border-4 border-primary bg-surface woodcut-shadow p-6">
+        <div className="flex items-center justify-between gap-3 mb-4">
+          <h3 className="font-headline-sm text-headline-sm uppercase">Pending Requests</h3>
+          {pendingCount > 0 && (
+            <span className="font-label-sm text-label-sm uppercase bg-secondary text-on-secondary px-2 py-0.5">
+              {pendingCount}
+            </span>
           )}
+        </div>
 
-          {outgoing.length > 0 && (
-            <div>
-              <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">Sent</p>
-              <ul className="space-y-3">
-                {outgoing.map(r => (
-                  <li key={r.id} className="flex items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
-                    <div className="min-w-0">
-                      <p className="font-body-md text-body-md text-primary truncate">{r.name}</p>
-                      <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{r.email}</p>
-                    </div>
-                    <span className="font-label-sm text-label-sm uppercase text-on-surface-variant border-2 border-outline-variant px-3 py-1.5 shrink-0">
-                      Pending
-                    </span>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </section>
-      )}
+        {requestsError && (
+          <p className="font-label-sm text-label-sm text-secondary mb-4">
+            Could not load requests: {requestsError}
+          </p>
+        )}
+
+        {incoming.length > 0 && (
+          <div className="mb-6">
+            <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">
+              Wants to join your Sangha
+            </p>
+            <ul className="space-y-3">
+              {incoming.map(r => (
+                <li key={r.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
+                  <div className="min-w-0">
+                    <p className="font-body-md text-body-md text-primary truncate">{r.name}</p>
+                    <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{r.email}</p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={actionId === r.id}
+                      onClick={() => handleAccept(r.id)}
+                      className="flex-1 sm:flex-none border-2 border-primary bg-primary text-on-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50"
+                    >
+                      Accept
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actionId === r.id}
+                      onClick={() => handleDecline(r.id)}
+                      className="flex-1 sm:flex-none border-2 border-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-surface-variant transition-colors disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {outgoing.length > 0 && (
+          <div className={incoming.length > 0 ? 'mb-4' : ''}>
+            <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">
+              Sent by you
+            </p>
+            <ul className="space-y-3">
+              {outgoing.map(r => (
+                <li key={r.id} className="flex items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
+                  <div className="min-w-0">
+                    <p className="font-body-md text-body-md text-primary truncate">{r.name}</p>
+                    <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{r.email}</p>
+                  </div>
+                  <span className="font-label-sm text-label-sm uppercase text-on-surface-variant border-2 border-outline-variant px-3 py-1.5 shrink-0">
+                    Pending
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {pendingCount === 0 && !requestsError && (
+          <p className="font-body-md text-body-md text-on-surface-variant">
+            No pending requests. When someone sends you a request, it will appear here to accept or decline.
+          </p>
+        )}
+      </section>
 
       <section>
         <h3 className="font-headline-sm text-headline-sm uppercase mb-4">Today&apos;s Practice</h3>
@@ -296,7 +325,7 @@ export default function TeamScreen() {
   );
 }
 
-function RelationButton({ relation, loading, onRequest }) {
+function RelationButton({ relation, loading, requestId, onRequest, onAccept, onDecline }) {
   if (relation === 'friend') {
     return (
       <span className="font-label-sm text-label-sm uppercase text-[#15803d] border-2 border-[#15803d] px-3 py-1.5 shrink-0">
@@ -311,11 +340,26 @@ function RelationButton({ relation, loading, onRequest }) {
       </span>
     );
   }
-  if (relation === 'pending_incoming') {
+  if (relation === 'pending_incoming' && requestId) {
     return (
-      <span className="font-label-sm text-label-sm uppercase text-secondary border-2 border-secondary px-3 py-1.5 shrink-0">
-        Wants to join
-      </span>
+      <div className="flex gap-2 shrink-0">
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => onAccept(requestId)}
+          className="border-2 border-primary bg-primary text-on-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50"
+        >
+          Accept
+        </button>
+        <button
+          type="button"
+          disabled={loading}
+          onClick={() => onDecline(requestId)}
+          className="border-2 border-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-surface-variant transition-colors disabled:opacity-50"
+        >
+          Decline
+        </button>
+      </div>
     );
   }
   return (
