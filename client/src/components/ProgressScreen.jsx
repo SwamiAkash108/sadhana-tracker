@@ -162,35 +162,6 @@ export default function ProgressScreen({ user }) {
             </div>
           </div>
         </div>
-
-        <div className="col-span-12 mt-8">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-gutter relative">
-            <div className="absolute inset-0 halftone-bg opacity-5 -z-10 bg-surface-container" />
-            <StatBlock
-              label="30-Day Atma Kriya"
-              value={`${stats.akyCompletionRate ?? 0}%`}
-              unit="Avg Completion"
-              pct={stats.akyCompletionRate ?? 0}
-              accent
-            />
-          </div>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function StatBlock({ label, value, unit, pct, accent }) {
-  return (
-    <div className="border-t-4 border-primary pt-6 pl-4 relative">
-      <div className={`absolute left-0 top-0 bottom-0 w-1 ${accent ? 'bg-secondary' : 'bg-primary'}`} />
-      <h4 className="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant mb-2">{label}</h4>
-      <div className="flex items-end gap-3">
-        <span className={`font-headline-xl text-headline-xl leading-none ${accent ? 'text-secondary' : 'text-primary'}`}>{value}</span>
-        <span className="font-body-md text-body-md text-on-surface-variant mb-2 font-bold uppercase">{unit}</span>
-      </div>
-      <div className="w-full bg-surface-variant h-1 mt-4">
-        <div className={`h-1 ${accent ? 'bg-secondary' : 'bg-primary'}`} style={{ width: `${pct}%` }} />
       </div>
     </div>
   );
