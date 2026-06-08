@@ -8,240 +8,99 @@ export default function ProgressScreen({ user }) {
 
   const fetchStats = useCallback(async (d) => {
     setLoading(true);
-    try {
-      const data = await api.getStats(d);
-      setStats(data);
-    } catch (err) { /* ignore */ }
+    try { const data = await api.getStats(d); setStats(data); } catch (err) {}
     finally { setLoading(false); }
   }, []);
 
   useEffect(() => { fetchStats(days); }, [days, fetchStats]);
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <div className="w-6 h-6 border-2 border-ink border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if (loading) return <div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin"/></div>;
   if (!stats) return null;
 
   const currentStreak = stats.streak || 0;
   const longestStreak = 48;
   const today = new Date();
-
   const monthDates = [];
-  for (let i = 29; i >= 0; i--) {
-    const d = new Date(today);
-    d.setDate(d.getDate() - i);
-    monthDates.push(d);
-  }
-
-  const dayMap = {};
-  (stats.dailyData || []).forEach(day => { dayMap[day.date] = day; });
+  for (let i=29;i>=0;i--) { const d=new Date(today); d.setDate(d.getDate()-i); monthDates.push(d); }
+  const dayMap={};
+  (stats.dailyData||[]).forEach(day=>{dayMap[day.date]=day;});
 
   return (
-    <>
-      <div className="lg:hidden space-y-5">
+    <div className="max-w-4xl mx-auto">
+      <div className="space-y-8">
         <JourneyHeader />
-        <StreakBoxes current={currentStreak} longest={longestStreak} />
-        <DaySelector days={days} setDays={setDays} />
-        <CalendarGrid monthDates={monthDates} dayMap={dayMap} today={today} />
-        <AveragesCard stats={stats} />
-      </div>
-
-      <div className="hidden lg:grid lg:grid-cols-12 lg:gap-4">
-        <div className="col-span-8 space-y-4">
-          <div className="card-wood p-6">
-            <JourneyHeader />
-            <div className="mt-4 grid grid-cols-2 gap-4">
-              <StreakBoxes current={currentStreak} longest={longestStreak} />
-            </div>
-          </div>
-          <div className="card-wood p-6">
-            <div className="flex items-center justify-between mb-4">
-              <h3 className="text-xs font-display font-black text-ink uppercase tracking-widest">
-                {today.toLocaleDateString('en-US', { month: 'long', year: 'numeric' }).toUpperCase()} Consistency
-              </h3>
-              <DaySelector days={days} setDays={setDays} />
-            </div>
-            <CalendarGrid monthDates={monthDates} dayMap={dayMap} today={today} />
-          </div>
+        <div className="grid md:grid-cols-2 gap-4">
+          <StreakCards current={currentStreak} longest={longestStreak} />
         </div>
-
-        <div className="col-span-4 space-y-4">
-          <div className="card-wood p-6">
-            <h3 className="text-xs font-display font-black text-ink uppercase tracking-widest mb-4">
-              October Cycle
-            </h3>
-            <div className="space-y-4">
-              <StatRow label="Current Streak" value={`${currentStreak} Days`} sub="Keep the fire burning" />
-              <StatRow label="Longest Streak" value={`${longestStreak} Days`} sub="Personal best achieved in Aug" highlight />
-            </div>
+        <div className="card-woodcut p-6">
+          <div className="flex justify-between items-end mb-6 border-b border-black pb-2">
+            <h2 className="text-2xl font-display font-bold text-black">Consistency</h2>
+            <DaySelector days={days} setDays={setDays} />
           </div>
-          <div className="card-wood p-6">
-            <h3 className="text-xs font-display font-black text-ink uppercase tracking-widest mb-4">
-              30-Day Averages
-            </h3>
-            <div className="space-y-4">
-              <AvgRow label="Japa Rounds" value="14.2" unit="rounds/day" pct={85} />
-              <AvgRow label="Atma Kriya" value="85" unit="% completion" pct={85} highlight />
-              <AvgRow label="Meditation" value="28" unit="min/day" pct={70} />
-              <AvgRow label="Hydration" value="2.3" unit="L/day" pct={92} />
-            </div>
-          </div>
+          <CalGrid monthDates={monthDates} dayMap={dayMap} today={today} />
         </div>
+        <AveragesBars />
       </div>
-    </>
+    </div>
   );
 }
 
 function JourneyHeader() {
   return (
-    <div>
-      <h2 className="text-2xl lg:text-3xl font-display font-black text-ink mb-1">My Journey</h2>
-      <p className="text-[10px] lg:text-xs text-mute italic leading-relaxed">
+    <div className="flex flex-col gap-4 border-l-4 border-black pl-4">
+      <h1 className="text-4xl lg:text-5xl font-display font-bold text-black tracking-tight">My Journey</h1>
+      <p className="text-base text-gray-500 italic border-l-2 border-[#b22a27] pl-4 py-1">
         &ldquo;The mind is restless and difficult to restrain, but it is subdued by practice.&rdquo;
       </p>
     </div>
   );
 }
 
-function StreakBoxes({ current, longest }) {
-  return (
-    <>
-      <div className="stat-card">
-        <p className="text-[10px] text-mute uppercase tracking-widest font-bold mb-1">Current Streak</p>
-        <p className="text-3xl lg:text-4xl font-display font-black text-ink">{current}</p>
-        <p className="text-[9px] text-mute uppercase tracking-wider mt-1">Days</p>
-        <div className="mt-2 h-1 bar-wood">
-          <div className="bar-wood-fill" style={{ width: `${Math.min(current * 8.3, 100)}%` }} />
-        </div>
-      </div>
-      <div className="stat-card bg-ink">
-        <p className="text-[10px] text-paper/40 uppercase tracking-widest font-bold mb-1">
-          Longest Streak
-        </p>
-        <p className="text-3xl lg:text-4xl font-display font-black text-rust">{longest}</p>
-        <p className="text-[9px] text-paper/40 uppercase tracking-wider mt-1">Days</p>
-      </div>
-    </>
-  );
-}
-
-function StatRow({ label, value, sub, highlight }) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1">
-        <span className="text-[10px] text-mute uppercase tracking-widest font-bold">{label}</span>
-        <span className={`text-lg font-display font-black ${highlight ? 'text-rust' : 'text-ink'}`}>
-          {value}
-        </span>
-      </div>
-      <p className="text-[9px] text-mute">{sub}</p>
-    </div>
-  );
-}
-
-function AvgRow({ label, value, unit, pct, highlight }) {
-  return (
-    <div>
-      <div className="flex items-baseline justify-between mb-1">
-        <span className="text-[10px] text-mute uppercase tracking-widest font-bold">{label}</span>
-        <span className={`text-sm font-display font-black ${highlight ? 'text-rust' : 'text-ink'}`}>
-          {value} <span className="text-[9px] font-sans font-medium text-mute ml-0.5">{unit}</span>
-        </span>
-      </div>
-      <div className="bar-wood">
-        <div className={`bar-wood-fill ${highlight ? 'rust' : ''}`} style={{ width: `${pct}%` }} />
+function StreakCards({ current, longest }) {
+  return (<>
+    <div className="card-woodcut p-5 relative overflow-hidden group cursor-default col-span-1">
+      <div className="absolute inset-0 bg-[#b22a27] translate-y-full group-hover:translate-y-0 transition-transform duration-300" />
+      <div className="relative z-10 flex flex-col justify-between h-full group-hover:text-white transition-colors duration-300">
+        <span className="text-xs uppercase tracking-wider text-gray-500 group-hover:text-white/80">Current Streak</span>
+        <div className="flex items-baseline gap-2 mt-4"><span className="text-5xl font-display font-bold">{current}</span><span className="text-base">days</span></div>
       </div>
     </div>
-  );
+    <div className="card-woodcut p-5 bg-black text-white relative overflow-hidden col-span-1">
+      <div className="absolute inset-0 bg-halftone opacity-40 mix-blend-overlay" />
+      <div className="relative z-10 flex flex-col justify-between h-full">
+        <span className="text-xs uppercase tracking-wider text-white/60">Longest Streak</span>
+        <div className="flex items-baseline gap-2 mt-4"><span className="text-5xl font-display font-bold text-[#b22a27]">{longest}</span><span className="text-base text-white/60">days</span></div>
+      </div>
+    </div>
+  </>);
 }
 
 function DaySelector({ days, setDays }) {
-  return (
-    <div className="flex gap-1.5">
-      {[7, 14, 30, 60].map(d => (
-        <button
-          key={d}
-          onClick={() => setDays(d)}
-          className={`text-[9px] font-bold uppercase tracking-wider px-2.5 py-1 border-2 border-ink transition-all ${
-            days === d ? 'bg-ink text-paper' : 'bg-paper text-mute hover:text-ink'
-          }`}
-        >
-          {d}d
-        </button>
-      ))}
-    </div>
-  );
+  return (<div className="flex gap-1">{[7,14,30,60].map(d=><button key={d} onClick={()=>setDays(d)} className={`text-[10px] font-bold uppercase tracking-wider px-3 py-1.5 border-2 border-black transition-all ${days===d?'bg-black text-white':'bg-white text-gray-500 hover:text-black'}`}>{d}D</button>)}</div>);
 }
 
-function CalendarGrid({ monthDates, dayMap, today }) {
-  const dayNames = ['S','M','T','W','T','F','S'];
-  const firstDate = monthDates[0];
-  const startDay = firstDate.getDay();
-  const leadingBlanks = startDay;
-
-  return (
-    <div>
-      <div className="grid grid-cols-7 gap-1 lg:gap-1.5">
-        {dayNames.map(d => (
-          <div key={d} className="text-[9px] lg:text-[10px] text-mute text-center font-bold py-0.5">{d}</div>
-        ))}
-        {Array.from({ length: leadingBlanks }).map((_, i) => (
-          <div key={`l-${i}`} className="aspect-square" />
-        ))}
-        {monthDates.map((d) => {
-          const ds = d.toISOString().split('T')[0];
-          const hasData = dayMap[ds];
-          const pct = hasData ? Math.round(dayMap[ds].percentage) : 0;
-          let bg = 'bg-paper';
-          if (hasData && pct >= 100) bg = 'bg-ink';
-          else if (hasData && pct >= 50) bg = 'bg-rust';
-          else if (hasData && pct > 0) bg = 'bg-stone-dark';
-          const isFuture = d > today;
-          return (
-            <div
-              key={ds}
-              className={`heat-cell ${bg} ${isFuture ? 'opacity-20' : ''}`}
-              title={`${ds}${hasData ? `: ${dayMap[ds].completed}/${dayMap[ds].total}` : ''}`}
-            />
-          );
-        })}
-      </div>
-      <div className="flex items-center justify-end gap-2 mt-2 text-[8px] lg:text-[9px] text-mute font-medium">
-        <span>0%</span>
-        <div className="w-3 h-3 bg-paper border border-ink/15" />
-        <div className="w-3 h-3 bg-stone-dark" />
-        <div className="w-3 h-3 bg-rust" />
-        <div className="w-3 h-3 bg-ink" />
-        <span>100%</span>
-      </div>
+function CalGrid({ monthDates, dayMap, today }) {
+  const dayNames=['S','M','T','W','T','F','S'];
+  const firstDate=monthDates[0];
+  const leadingBlanks=firstDate.getDay();
+  return (<div>
+    <div className="grid grid-cols-7 gap-2">
+      {dayNames.map(d=><div key={d} className="text-center text-xs text-gray-500 font-bold py-0.5">{d}</div>)}
+      {Array.from({length:leadingBlanks}).map((_,i)=><div key={`l-${i}`} className="aspect-square"/>)}
+      {monthDates.map(d=>{const ds=d.toISOString().split('T')[0];const has=dayMap[ds];const pct=has?dayMap[ds].percentage:0;let bg='bg-white border border-gray-300';if(has&&pct>=100)bg='bg-black border border-black text-white';else if(has&&pct>=50)bg='bg-halftone border border-black';else if(has&&pct>0)bg='bg-gray-300 border border-black';return <div key={ds} className={`aspect-square flex items-center justify-center text-[11px] font-bold ${bg} ${d>today?'opacity-20':''}`}>{d.getDate()}</div>;})}
     </div>
-  );
+    <div className="mt-3 flex gap-4 text-[10px] text-gray-500 justify-end">
+      <span className="flex items-center gap-1"><span className="w-3 h-3 border border-gray-300"/> Missed</span>
+      <span className="flex items-center gap-1"><span className="w-3 h-3 bg-halftone border border-black"/> Partial</span>
+      <span className="flex items-center gap-1"><span className="w-3 h-3 bg-black"/> Complete</span>
+    </div>
+  </div>);
 }
 
-function AveragesCard({ stats }) {
-  return (
-    <div className="card-wood p-5">
-      <h3 className="text-xs font-bold text-ink uppercase tracking-widest mb-4">30-Day Averages</h3>
-      <div className="space-y-3">
-        {[
-          { label: 'All Sadhana', pct: stats.overallRate || 0 },
-          { label: 'Japa', pct: 85 },
-          { label: 'Atma Kriya Yoga', pct: 60 },
-          { label: 'Hydration', pct: 92 },
-        ].map(item => (
-          <div key={item.label} className="flex items-center gap-3">
-            <span className="text-xs text-mute w-24 text-right font-medium">{item.label}</span>
-            <div className="flex-1 bar-wood">
-              <div className={`bar-wood-fill ${item.pct >= 80 ? 'rust' : ''}`} style={{ width: `${item.pct}%` }} />
-            </div>
-            <span className="text-[10px] text-mute font-bold tabular-nums w-10">{item.pct}%</span>
-          </div>
-        ))}
-      </div>
-    </div>
-  );
+function AveragesBars() {
+  const items=[{label:'Japa Mala',val:85},{label:'Atma Kriya Yoga',val:60,sec:true},{label:'Hydration',val:92}];
+  return (<div className="card-woodcut p-6 space-y-5">
+    <h3 className="text-sm font-display font-bold text-black pb-2 border-b-4 border-black inline-block">30-Day Averages</h3>
+    {items.map(it=>(<div key={it.label}><div className="flex justify-between text-[10px] mb-1 uppercase tracking-wide"><span className="font-bold">{it.label}</span><span className={it.sec?'text-[#b22a27]':'text-gray-500'}>{it.val}%</span></div><div className="h-4 w-full bg-white border border-black overflow-hidden"><div className={`h-full ${it.sec?'bg-halftone bg-black':'bg-black'}`} style={{width:`${it.val}%`}}/></div></div>))}
+  </div>);
 }

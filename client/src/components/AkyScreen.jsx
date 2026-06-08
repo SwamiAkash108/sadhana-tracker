@@ -6,237 +6,72 @@ export default function AkyScreen({ onClose }) {
   const [loading, setLoading] = useState(true);
 
   const fetchItems = useCallback(async () => {
-    try {
-      const data = await api.getItems();
-      setItems(data.items.filter(i =>
-        !(i.name || '').toLowerCase().includes('japa') &&
-        !['exercise', 'water', 'study', 'abhishekam'].includes((i.name || '').toLowerCase())
-      ));
-    } catch (err) { /* ignore */ }
-    finally { setLoading(false); }
-  }, []);
+    try { const data=await api.getItems(); setItems(data.items.filter(i=>!(i.name||'').toLowerCase().includes('japa')&&!['exercise','water','study','abhishekam'].includes((i.name||'').toLowerCase()))); } catch(err){}
+    finally{setLoading(false);}
+  },[]);
 
-  useEffect(() => { fetchItems(); }, [fetchItems]);
+  useEffect(()=>{fetchItems();},[fetchItems]);
 
-  const handleToggle = async (itemId) => {
-    setItems(prev => prev.map(i =>
-      i.id === itemId ? { ...i, completed: !i.completed } : i
-    ));
-    try { await api.toggleItem(itemId); } catch {
-      setItems(prev => prev.map(i =>
-        i.id === itemId ? { ...i, completed: !i.completed } : i
-      ));
-    }
-  };
+  const handleToggle=async(itemId)=>{setItems(prev=>prev.map(i=>i.id===itemId?{...i,completed:!i.completed}:i));try{await api.toggleItem(itemId);}catch{setItems(prev=>prev.map(i=>i.id===itemId?{...i,completed:!i.completed}:i));}};
 
-  if (loading) {
-    return (
-      <div className="flex justify-center py-20">
-        <div className="w-6 h-6 border-2 border-ink border-t-transparent rounded-full animate-spin" />
-      </div>
-    );
-  }
+  if(loading)return<div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-black border-t-transparent rounded-full animate-spin"/></div>;
 
-  const done = items.filter(i => i.completed).length;
-  const total = items.length || 12;
+  const done=items.filter(i=>i.completed).length;
+  const total=items.length||12;
 
-  const groups = {};
-  for (const item of items) {
-    const cat = item.category || 'other';
-    if (!groups[cat]) groups[cat] = [];
-    groups[cat].push(item);
-  }
+  const groups={};
+  for(const item of items){const cat=item.category||'other';if(!groups[cat])groups[cat]=[];groups[cat].push(item);}
 
-  const categoryMeta = {
-    pranayama: { label: 'Pranayama', roman: 'I' },
-    kriya: { label: 'Core Kriya', roman: 'II' },
-    mudras: { label: 'Mudras & Asanas', roman: 'III' },
-    meditation: { label: 'Meditation', roman: 'IV' },
-    advanced: { label: 'Advanced', roman: 'V' },
-  };
+  const CATEGORY_META={pranayama:{label:'Pranayama',roman:'I',icon:'🌬️'},kriya:{label:'Core Kriya',roman:'II',icon:'🔥',accent:true},mudras:{label:'Mudras & Asanas',roman:'III',icon:'🤲'},meditation:{label:'Meditation',roman:'IV',icon:'🧘'},advanced:{label:'Advanced',roman:'V',icon:'⭐',accent:true}};
 
-  return (
-    <>
-      <div className="lg:hidden space-y-5">
-        <div>
-          <button onClick={onClose} className="text-xs text-mute uppercase tracking-widest font-bold mb-1 block hover:text-ink">
-            ← Today
-          </button>
-          <h2 className="text-2xl font-display font-black text-ink">Atma Kriya Yoga</h2>
-        </div>
-        {renderSections(groups, categoryMeta, handleToggle)}
-        <button className="btn-wood w-full text-[11px]">COMPLETE SESSION</button>
-      </div>
-
-      <div className="hidden lg:block max-w-4xl mx-auto">
-        <div className="flex items-start justify-between mb-6">
-          <div>
-            <button onClick={onClose} className="text-xs text-mute uppercase tracking-widest font-bold mb-1 block hover:text-ink">
-              ← Back to Today
-            </button>
-            <h2 className="text-3xl font-display font-black text-ink">Atma Kriya Yoga</h2>
-            <p className="text-xs text-mute mt-1">Daily Practice Routine</p>
-          </div>
-          <div className="text-right">
-            <span className="text-xs text-mute uppercase tracking-widest font-bold">{done} / {total} Completed</span>
-          </div>
-        </div>
-
-        <div className="grid lg:grid-cols-2 gap-4">
-          {renderDesktopSections(groups, categoryMeta, handleToggle)}
-        </div>
-
-        <div className="mt-6 flex justify-end">
-          <button className="btn-wood text-[11px] px-8">COMPLETE SESSION →</button>
-        </div>
-      </div>
-    </>
-  );
-}
-
-function renderSections(groups, meta, onToggle) {
-  return Object.entries(groups).map(([cat, groupItems]) => {
-    const m = meta[cat] || { label: cat, roman: '' };
-    return (
-      <div key={cat} className="card-wood p-4">
-        <h3 className="text-xs font-display font-bold text-rust uppercase tracking-widest mb-3 pb-2 border-b-2 border-ink">
-          {m.roman}. {m.label}
-        </h3>
-        <div className="space-y-1">
-          {groupItems.map(item => (
-            <ItemRow key={item.id} item={item} onToggle={onToggle} />
-          ))}
-        </div>
-      </div>
-    );
-  });
-}
-
-function renderDesktopSections(groups, meta, onToggle) {
-  return Object.entries(groups).map(([cat, groupItems]) => {
-    const m = meta[cat] || { label: cat, roman: '' };
-    return (
-      <div key={cat} className="card-wood p-5">
-        <h3 className="text-xs font-display font-bold text-rust uppercase tracking-widest mb-4 pb-2 border-b-2 border-ink">
-          {m.roman}. {m.label}
-        </h3>
-        <div className="space-y-2">
-          {groupItems.map(item => (
-            <ItemRowDesktop key={item.id} item={item} onToggle={onToggle} />
-          ))}
-        </div>
-      </div>
-    );
-  });
-}
-
-function ItemRow({ item, onToggle }) {
-  const completed = item.completed;
-  const isToggle = !item.item_type || item.item_type === 'toggle';
-  const isCounter = item.item_type === 'counter';
-
-  return (
-    <button
-      onClick={() => isToggle ? onToggle(item.id) : null}
-      className={`w-full flex items-center justify-between py-2.5 px-2 hover:bg-paper-dark/30 transition-colors ${
-        completed ? 'opacity-60' : ''
-      }`}
-    >
-      <div className="flex items-center gap-2">
-        <span className="text-sm">{item.emoji || '•'}</span>
-        <span className={`text-sm font-medium ${completed ? 'line-through text-mute' : 'text-ink'}`}>
-          {item.name}
-        </span>
-      </div>
-      {isToggle ? (
-        <div className={`w-5 h-5 border-2 flex items-center justify-center transition-all ${
-          completed ? 'bg-sage border-sage' : 'border-mute'
-        }`}>
-          {completed && (
-            <svg className="w-3 h-3 text-paper animate-check-pop" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="square">
-              <path d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-        </div>
-      ) : isCounter ? (
-        <Counter />
-      ) : (
-        <span className="text-xs font-display font-bold text-ink tabular-nums">05:00</span>
-      )}
-    </button>
-  );
-}
-
-function ItemRowDesktop({ item, onToggle }) {
-  const completed = item.completed;
-  const isToggle = !item.item_type || item.item_type === 'toggle';
-  const isCounter = item.item_type === 'counter';
-
-  return (
-    <div className={`flex items-center justify-between py-3 px-3 hover:bg-paper-dark/30 transition-colors ${
-      completed ? 'opacity-60' : ''
-    }`}>
-      <div className="flex items-center gap-3">
-        <div className={`w-5 h-5 border-2 flex items-center justify-center transition-all cursor-pointer ${
-          completed ? 'bg-sage border-sage' : 'border-mute'
-        }`}
-        onClick={() => isToggle ? onToggle(item.id) : null}>
-          {completed && (
-            <svg className="w-3 h-3 text-paper animate-check-pop" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="4" strokeLinecap="square">
-              <path d="M5 13l4 4L19 7" />
-            </svg>
-          )}
-        </div>
-        <div>
-          <span className={`text-sm font-medium ${completed ? 'line-through text-mute' : 'text-ink'}`}>
-            {item.name}
-          </span>
-          {item.tag && (
-            <span className="ml-2 text-[8px] text-mute uppercase tracking-widest font-bold">{item.tag}</span>
-          )}
-        </div>
-      </div>
-      <div>
-        {isCounter ? (
-          <Counter />
-        ) : isToggle ? (
-          <div className={`w-6 h-6 border-2 flex items-center justify-center ${
-            completed ? 'bg-ink border-ink' : 'border-mute'
-          }`}>
-            {completed && <span className="text-[11px] text-paper font-bold">✓</span>}
-          </div>
-        ) : (
-          <div className="flex items-center gap-2">
-            <SunIcon />
-            <MoonIcon />
-          </div>
-        )}
-      </div>
+  return (<div className="max-w-3xl mx-auto space-y-6">
+    <div className="flex items-center justify-between">
+      <div><button onClick={onClose} className="text-xs text-gray-500 uppercase tracking-widest font-bold mb-1 hover:text-black">← Today</button><h1 className="text-2xl lg:text-3xl font-display font-bold text-black">Atma Kriya Yoga</h1></div>
+      <div className="text-right"><span className="text-xs text-gray-500 uppercase tracking-widest font-bold">{done}/{total} Completed</span></div>
     </div>
-  );
+    {Object.entries(groups).map(([cat,gItems])=>{const meta=CATEGORY_META[cat]||{label:cat,roman:'',icon:'•'};
+      return(<section key={cat} className="flex flex-col gap-3"><h3 className={`text-lg font-display font-bold flex items-center gap-2 pb-2 border-b-2 border-black ${meta.accent?'text-[#b22a27]':'text-black'}`}><span>{meta.icon}</span>{meta.roman}. {meta.label}</h3><div className="flex flex-col gap-3">{gItems.map(item=><PracticeCard key={item.id} item={item} onToggle={handleToggle}/>)}</div></section>);
+    })}
+    <button className="btn-woodcut w-full py-4 bg-black text-white text-xl font-display font-bold uppercase tracking-wider relative overflow-hidden group"><div className="absolute inset-0 bg-halftone opacity-0 group-hover:opacity-20 transition-opacity"/><span className="relative z-10">Complete Session</span></button>
+  </div>);
 }
 
-function Counter() {
-  return (
-    <div className="flex items-center gap-1.5">
-      <button className="btn-wood text-[9px] px-2.5 py-1">−</button>
-      <span className="text-sm font-bold text-ink tabular-nums w-6 text-center">0</span>
-      <button className="btn-wood text-[9px] px-2.5 py-1">+</button>
+function PracticeCard({item,onToggle}){
+  const completed=item.completed;
+  const isToggle=!item.item_type||item.item_type==='toggle';
+  const isCounter=item.item_type==='counter';
+  const isTimer=item.item_type==='timer';
+  const isKriya=(item.name||'').toLowerCase().includes('main kriya');
+  if(isKriya)return<KriyaCard item={item} onToggle={onToggle}/>;
+  return(<div className={`card-woodcut p-4 flex justify-between items-center relative overflow-hidden group hover:bg-gray-50/50 transition-colors ${completed?'opacity-60':''}`}>
+    <div className="absolute right-0 top-0 h-full w-16 bg-halftone opacity-10"/>
+    <div className="flex flex-col z-10"><span className="text-[10px] bg-black text-white px-2 py-0.5 w-fit uppercase mb-1 font-bold">{item.category||'Practice'}</span><h4 className="text-base font-bold text-black">{item.name}</h4></div>
+    <div className="flex items-center gap-4 z-10">
+      {isCounter&&<CounterControls/>}
+      {isToggle&&<button onClick={()=>onToggle(item.id)} className={`w-6 h-6 border-2 border-black flex items-center justify-center transition-all ${completed?'bg-[#b22a27] border-[#b22a27]':''}`}>{completed&&<span className="text-white text-sm font-bold">✓</span>}</button>}
+      {isTimer&&<TimerDisplay/>}
+      {item.am_pm?<AmPmToggles/>:null}
     </div>
-  );
+  </div>);
 }
 
-function SunIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <circle cx="12" cy="12" r="5" /><path d="M12 1v2M12 21v2M4.22 4.22l1.42 1.42M18.36 18.36l1.42 1.42M1 12h2M21 12h2M4.22 19.78l1.42-1.42M18.36 5.64l1.42-1.42" />
-    </svg>
-  );
+function KriyaCard({item}){
+  return(<div className={`card-woodcut p-6 flex flex-col items-center gap-5 relative overflow-hidden ${item.completed?'border-[#b22a27]':''}`}>
+    <div className="absolute inset-0 bg-halftone opacity-5 pointer-events-none"/>
+    <h4 className="text-2xl font-display font-bold text-center z-10">Main Kriya</h4>
+    <div className="flex gap-8 z-10">
+      <KriyaSession label="AM Session"/>
+      <KriyaSession label="PM Session"/>
+    </div>
+  </div>);
 }
-function MoonIcon() {
-  return (
-    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
-      <path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z" />
-    </svg>
-  );
+
+function KriyaSession({label}){
+  return(<div className="flex flex-col items-center gap-2"><span className="text-[10px] uppercase tracking-widest font-bold">{label}</span><div className="relative w-20 h-20 flex items-center justify-center"><svg className="w-full h-full -rotate-90 absolute" viewBox="0 0 100 100"><circle cx="50" cy="50" fill="none" r="45" stroke="#e5e2e1" strokeWidth="8"/></svg><span className="text-xl font-display font-bold">0</span></div><div className="flex gap-2"><button className="w-7 h-7 border-2 border-black flex items-center justify-center text-sm">−</button><button className="w-7 h-7 border-2 border-black bg-black text-white flex items-center justify-center text-sm">+</button></div></div>);
 }
+
+function CounterControls(){return(<div className="flex items-center gap-2"><button className="w-7 h-7 border-2 border-black flex items-center justify-center text-sm hover:bg-black hover:text-white transition-colors">−</button><span className="text-sm font-bold w-6 text-center tabular-nums">0</span><button className="w-7 h-7 border-2 border-black bg-black text-white flex items-center justify-center text-sm hover:bg-[#b22a27] transition-colors">+</button></div>);}
+
+function TimerDisplay(){return(<button className="px-3 py-1.5 bg-black text-white text-[10px] uppercase tracking-widest font-bold border-2 border-black hover:bg-white hover:text-black transition-colors flex items-center gap-1"><span>▶</span> 05:00</button>);}
+
+function AmPmToggles(){return(<div className="flex items-center gap-3"><label className="flex flex-col items-center gap-0.5 cursor-pointer"><span className="text-[9px] uppercase font-bold">AM</span><div className="w-7 h-7 border-2 border-black flex items-center justify-center"><span className="text-xs">☀️</span></div></label><label className="flex flex-col items-center gap-0.5 cursor-pointer"><span className="text-[9px] uppercase font-bold">PM</span><div className="w-7 h-7 border-2 border-black flex items-center justify-center"><span className="text-xs">🌙</span></div></label></div>);}
