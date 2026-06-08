@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import InstallPrompt from './InstallPrompt';
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -95,7 +94,6 @@ export default function Login() {
               </Link>
             </p>
           </div>
-          <InstallPrompt variant="banner" />
         </div>
       </main>
     </div>

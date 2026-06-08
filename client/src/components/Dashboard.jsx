@@ -4,7 +4,6 @@ import TodayScreen from './TodayScreen';
 import ProgressScreen from './ProgressScreen';
 import TeamScreen from './TeamScreen';
 import AkyScreen from './AkyScreen';
-import InstallPrompt from './InstallPrompt';
 
 const TABS = [
   { key: 'today', label: 'Today', icon: 'event_note' },
@@ -34,7 +33,6 @@ export default function Dashboard() {
           </h1>
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
-          <InstallPrompt />
           <span className="hidden sm:inline-block font-label-sm text-label-sm font-bold border-2 border-primary px-2 sm:px-3 py-1 bg-surface">{dateStr}</span>
           <button onClick={logout} className="p-1.5 sm:p-2 hover:bg-surface-variant rounded-full transition-colors" title="Sign out">
             <span className="material-symbols-outlined">logout</span>
