@@ -1,34 +1,230 @@
-import { useState,useEffect,useCallback } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 
-export default function AkyScreen({onClose}){
-  const[items,setItems]=useState([]);const[loading,setLoading]=useState(true);
-  const fetchItems=useCallback(async()=>{try{const data=await api.getItems();setItems(data.items);}catch(err){}finally{setLoading(false);}},[]);
-  useEffect(()=>{fetchItems();},[fetchItems]);
-  const handleToggle=async(itemId)=>{setItems(prev=>prev.map(i=>i.id===itemId?{...i,completed:!i.completed}:i));try{await api.toggleItem(itemId);}catch{setItems(prev=>prev.map(i=>i.id===itemId?{...i,completed:!i.completed}:i));}};
-  if(loading)return(<div className="flex justify-center py-20"><div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin"/></div>);
-  const done=items.filter(i=>i.completed).length;const total=items.length||12;
-  const byCat=(c)=>items.filter(i=>(i.category||'').toLowerCase()===c||(i.name||'').toLowerCase().includes(c));
+export default function AkyScreen({ onClose }) {
+  const [items, setItems] = useState([]);
+  const [loading, setLoading] = useState(true);
 
-  return(<div className="flex flex-col gap-12 py-12">
-    <header className="flex items-center justify-between border-b-border-width-thick border-primary pb-8 mb-8">
-      <div className="flex items-center gap-4"><button onClick={onClose} className="flex items-center justify-center w-12 h-12 border-border-width-thin border-primary bg-surface hover:bg-secondary hover:text-on-secondary transition-colors group rounded-none"><span className="material-symbols-outlined group-hover:-translate-x-1 transition-transform">arrow_back</span></button><div><h1 className="font-headline-lg text-headline-lg text-primary uppercase tracking-tighter">Atma Kriya</h1><p className="font-label-sm text-label-sm text-on-surface-variant tracking-widest uppercase mt-2">Daily Practice Routine</p></div></div>
-      <div className="text-right"><div className="font-headline-md text-headline-md text-primary">{done} / {total}</div><div className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest mt-1">Completed</div></div>
-    </header>
-    <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
-      <section className="flex flex-col gap-6"><h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4">I. Core Kriya</h2>{byCat('kriya').map(item=>(<KriyaCard key={item.id} item={item}/>))}</section>
-      <section className="flex flex-col gap-6"><h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4">II. Pranayama</h2>{byCat('pranayama').map(item=>(<CounterArticle key={item.id} item={item}/>))}</section>
-      <section className="flex flex-col gap-6"><h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4 mt-8 lg:mt-0">III. Mudras &amp; Asanas</h2><div className="grid grid-cols-1 sm:grid-cols-2 gap-4">{byCat('mudra').map(item=>(<ToggleTile key={item.id} item={item} onToggle={handleToggle}/>))}</div></section>
-      <section className="flex flex-col gap-6"><h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4 mt-8 lg:mt-0">IV. Meditation</h2><div className="flex flex-col gap-4">{byCat('meditation').map(item=>(<AmPmArticle key={item.id} item={item} onToggle={handleToggle}/>))}</div></section>
+  const fetchItems = useCallback(async () => {
+    try { const data = await api.getItems(); setItems(data.items); } catch (err) {}
+    finally { setLoading(false); }
+  }, []);
+
+  useEffect(() => { fetchItems(); }, [fetchItems]);
+
+  const handleToggle = async (itemId) => {
+    setItems(prev => prev.map(i => i.id===itemId ? {...i, completed: !i.completed} : i));
+    try { await api.toggleItem(itemId); } catch {
+      setItems(prev => prev.map(i => i.id===itemId ? {...i, completed: !i.completed} : i));
+    }
+  };
+
+  if (loading) return (
+    <div className="flex justify-center py-20">
+      <div className="w-6 h-6 border-2 border-primary border-t-transparent rounded-full animate-spin" />
     </div>
-    <div className="mt-12 pt-8 border-t-border-width-thick border-primary flex justify-end"><button onClick={onClose} className="bg-primary text-on-primary border-border-width-thin border-primary px-12 py-4 font-headline-sm text-headline-sm hover:bg-secondary hover:border-secondary hover:text-on-secondary transition-all woodcut-shadow uppercase tracking-wider relative overflow-hidden group"><span className="relative z-10 flex items-center gap-3">Complete Session<span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span></span><div className="absolute inset-0 bg-secondary opacity-0 group-hover:opacity-10 transition-opacity" style={{backgroundImage:'radial-gradient(#fff 1px,transparent 1px)',backgroundSize:'4px 4px'}}/></button></div>
-  </div>);
+  );
+
+  const done = items.filter(i => i.completed).length;
+  const total = items.length || 12;
+
+  return (
+    <div className="flex flex-col gap-8 md:gap-12 py-4 md:py-12">
+      {/* Header */}
+      <header className="flex flex-col sm:flex-row sm:items-center sm:justify-between border-b-border-width-thick border-primary pb-8 mb-8 gap-4">
+        <div className="flex items-center gap-4">
+          <button
+            onClick={onClose}
+            className="flex items-center justify-center w-12 h-12 border-border-width-thin border-primary bg-surface hover:bg-secondary hover:text-on-secondary transition-colors group rounded-none"
+          >
+            <span className="material-symbols-outlined group-hover:-translate-x-1 transition-transform">arrow_back</span>
+          </button>
+          <div>
+            <h1 className="font-headline-lg text-headline-lg text-primary uppercase tracking-tighter">Atma Kriya</h1>
+            <p className="font-label-sm text-label-sm text-on-surface-variant tracking-widest uppercase mt-2">Daily Practice Routine</p>
+          </div>
+        </div>
+        <div className="sm:text-right">
+          <div className="font-headline-md text-headline-md text-primary">{done} / {total}</div>
+          <div className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest mt-1">Completed</div>
+        </div>
+      </header>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
+        {/* Section I: Core Kriya */}
+        <section className="flex flex-col gap-6">
+          <h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4">I. Core Kriya</h2>
+          {items.filter(i => (i.category||'').toLowerCase()==='kriya' || (i.name||'').toLowerCase().includes('kriya')).map(item => (
+            <KriyaCard key={item.id} item={item} />
+          ))}
+        </section>
+
+        {/* Section II: Pranayama */}
+        <section className="flex flex-col gap-6">
+          <h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4">II. Pranayama</h2>
+          {items.filter(i => (i.category||'').toLowerCase()==='pranayama' || (i.name||'').toLowerCase().includes('pranayama') || (i.name||'').toLowerCase().includes('suka') || (i.name||'').toLowerCase().includes('nadhi')).map(item => (
+            <CounterArticle key={item.id} item={item} />
+          ))}
+        </section>
+
+        {/* Section III: Mudras & Asanas */}
+        <section className="flex flex-col gap-6">
+          <h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4 mt-8 lg:mt-0">III. Mudras &amp; Asanas</h2>
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+            {items.filter(i => (i.category||'').toLowerCase()==='mudras' || (i.name||'').toLowerCase().includes('mudra') || (i.name||'').toLowerCase().includes('khecari') || (i.name||'').toLowerCase().includes('maha')).map(item => (
+              <ToggleTile key={item.id} item={item} onToggle={handleToggle} />
+            ))}
+          </div>
+        </section>
+
+        {/* Section IV: Meditation */}
+        <section className="flex flex-col gap-6">
+          <h2 className="font-headline-md text-headline-md border-b-border-width-thin border-primary pb-4 mb-4 mt-8 lg:mt-0">IV. Meditation</h2>
+          <div className="flex flex-col gap-4">
+            {items.filter(i => (i.category||'').toLowerCase()==='meditation' || (i.name||'').toLowerCase().includes('trinity') || (i.name||'').toLowerCase().includes('nada') || (i.name||'').toLowerCase().includes('meditation')).map(item => (
+              <AmPmArticle key={item.id} item={item} onToggle={handleToggle} />
+            ))}
+          </div>
+        </section>
+      </div>
+
+      {/* Footer Action */}
+      <div className="mt-12 pt-8 border-t-border-width-thick border-primary flex justify-end">
+        <button
+          onClick={onClose}
+          className="bg-primary text-on-primary border-border-width-thin border-primary px-12 py-4 font-headline-sm text-headline-sm hover:bg-secondary hover:border-secondary hover:text-on-secondary transition-all woodcut-shadow uppercase tracking-wider relative overflow-hidden group"
+        >
+          <span className="relative z-10 flex items-center gap-3">
+            Complete Session
+            <span className="material-symbols-outlined group-hover:translate-x-1 transition-transform">arrow_forward</span>
+          </span>
+          <div className="absolute inset-0 bg-secondary opacity-0 group-hover:opacity-10 transition-opacity"
+            style={{backgroundImage:'radial-gradient(#fff 1px, transparent 1px)',backgroundSize:'4px 4px'}} />
+        </button>
+      </div>
+    </div>
+  );
 }
 
-function KriyaCard({item}){return(<article className="woodcut-shadow bg-surface border-border-width-thin border-primary p-6"><div className="flex justify-between items-start mb-6"><div><h3 className="font-headline-sm text-headline-sm text-primary mb-1">{item.name||'Main Kriya'}</h3><p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Spinal Breathing</p></div></div><div className="flex items-center justify-between gap-4"><div className="flex flex-col gap-2 flex-1"><label className="font-label-sm text-label-sm uppercase tracking-widest">Duration (Mins)</label><div className="flex items-center gap-4 bg-surface-container-low border-border-width-thin border-outline p-2 w-max"><button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors"><span className="material-symbols-outlined text-sm">remove</span></button><span className="font-label-sm text-label-sm w-8 text-center">15</span><button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors"><span className="material-symbols-outlined text-sm">add</span></button></div></div><div className="flex gap-2"><button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Morning Practice"><span className="material-symbols-outlined text-outline">light_mode</span></button><button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Evening Practice"><span className="material-symbols-outlined text-outline">dark_mode</span></button></div></div></article>);}
+function KriyaCard({ item }) {
+  return (
+    <article className="woodcut-shadow bg-surface border-border-width-thin border-primary p-6">
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h3 className="font-headline-sm text-headline-sm text-primary mb-1">{item.name || 'Main Kriya'}</h3>
+          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">Spinal Breathing</p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-2 flex-1">
+          <label className="font-label-sm text-label-sm uppercase tracking-widest">Duration (Mins)</label>
+          <div className="flex items-center gap-4 bg-surface-container-low border-border-width-thin border-outline p-2 w-max">
+            <button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors">
+              <span className="material-symbols-outlined text-sm">remove</span>
+            </button>
+            <span className="font-label-sm text-label-sm w-8 text-center">15</span>
+            <button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors">
+              <span className="material-symbols-outlined text-sm">add</span>
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Morning Practice">
+            <span className="material-symbols-outlined text-outline">light_mode</span>
+          </button>
+          <button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Evening Practice">
+            <span className="material-symbols-outlined text-outline">dark_mode</span>
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
 
-function CounterArticle({item}){const sub=(item.name||'').toLowerCase().includes('suka')?'Alternate Nostril':(item.name||'').toLowerCase().includes('nadhi')?'Nerve Cleansing':'Breathing';return(<article className="woodcut-shadow bg-surface border-border-width-thin border-primary p-6"><div className="flex justify-between items-start mb-6"><div><h3 className="font-headline-sm text-headline-sm text-primary mb-1">{item.name||'Practice'}</h3><p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">{sub}</p></div></div><div className="flex items-center justify-between gap-4"><div className="flex flex-col gap-2 flex-1"><label className="font-label-sm text-label-sm uppercase tracking-widest">Rounds</label><div className="flex items-center gap-4 bg-surface-container-low border-border-width-thin border-outline p-2 w-max"><button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors"><span className="material-symbols-outlined text-sm">remove</span></button><span className="font-label-sm text-label-sm w-8 text-center">0</span><button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors"><span className="material-symbols-outlined text-sm">add</span></button></div></div><div className="flex gap-2"><button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Morning Practice"><span className="material-symbols-outlined text-outline">light_mode</span></button><button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Evening Practice"><span className="material-symbols-outlined text-outline">dark_mode</span></button></div></div></article>);}
+function CounterArticle({ item }) {
+  const completed = item.completed;
+  return (
+    <article className="woodcut-shadow bg-surface border-border-width-thin border-primary p-6">
+      <div className="flex justify-between items-start mb-6">
+        <div>
+          <h3 className="font-headline-sm text-headline-sm text-primary mb-1">{item.name || 'Practice'}</h3>
+          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider">
+            {item.name?.toLowerCase().includes('suka') ? 'Alternate Nostril' :
+             item.name?.toLowerCase().includes('nadhi') ? 'Nerve Cleansing' : 'Breathing'}
+          </p>
+        </div>
+      </div>
+      <div className="flex items-center justify-between gap-4">
+        <div className="flex flex-col gap-2 flex-1">
+          <label className="font-label-sm text-label-sm uppercase tracking-widest">Rounds</label>
+          <div className="flex items-center gap-4 bg-surface-container-low border-border-width-thin border-outline p-2 w-max">
+            <button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors">
+              <span className="material-symbols-outlined text-sm">remove</span>
+            </button>
+            <span className="font-label-sm text-label-sm w-8 text-center">0</span>
+            <button className="w-8 h-8 flex items-center justify-center border-border-width-thin border-primary bg-surface hover:bg-surface-variant transition-colors">
+              <span className="material-symbols-outlined text-sm">add</span>
+            </button>
+          </div>
+        </div>
+        <div className="flex gap-2">
+          <button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Morning Practice">
+            <span className="material-symbols-outlined text-outline">light_mode</span>
+          </button>
+          <button className="h-12 w-12 border-border-width-thin border-primary bg-surface flex items-center justify-center hover:bg-surface-variant transition-colors" title="Evening Practice">
+            <span className="material-symbols-outlined text-outline">dark_mode</span>
+          </button>
+        </div>
+      </div>
+    </article>
+  );
+}
 
-function ToggleTile({item,onToggle}){const done=item.completed;const sub=(item.name||'').toLowerCase().includes('khecari')?'Tongue Lock':(item.name||'').toLowerCase().includes('maha')?'Great Seal':'Mudra';return(<article onClick={()=>onToggle(item.id)} className="bg-surface border-border-width-thin border-primary p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors group cursor-pointer relative overflow-hidden"><div className="absolute inset-0 bg-primary opacity-0 group-hover:opacity-5 transition-opacity" style={{backgroundImage:'radial-gradient(#000 1px,transparent 1px)',backgroundSize:'4px 4px'}}/><div className="relative z-10"><h3 className="font-body-lg text-body-lg font-bold mb-1">{item.name||'Practice'}</h3><p className="font-label-sm text-label-sm text-on-surface-variant uppercase">{sub}</p></div><div className={`w-6 h-6 border-2 border-primary rounded-full relative z-10 flex items-center justify-center ${done?'bg-primary text-on-primary':''}`}>{done&&<span className="material-symbols-outlined text-sm" style={{fontVariationSettings:"'FILL' 1"}}>check</span>}</div></article>);}
+function ToggleTile({ item, onToggle }) {
+  const done = item.completed;
+  return (
+    <article
+      onClick={() => onToggle(item.id)}
+      className="bg-surface border-border-width-thin border-primary p-4 flex items-center justify-between hover:bg-surface-container-low transition-colors group cursor-pointer relative overflow-hidden"
+    >
+      <div className="absolute inset-0 bg-primary opacity-0 group-hover:opacity-5 transition-opacity"
+        style={{backgroundImage:'radial-gradient(#000 1px, transparent 1px)',backgroundSize:'4px 4px'}} />
+      <div className="relative z-10">
+        <h3 className="font-body-lg text-body-lg font-bold mb-1">{item.name || 'Practice'}</h3>
+        <p className="font-label-sm text-label-sm text-on-surface-variant uppercase">
+          {item.name?.toLowerCase().includes('khecari') ? 'Tongue Lock' :
+           item.name?.toLowerCase().includes('maha') ? 'Great Seal' : 'Mudra'}
+        </p>
+      </div>
+      <div className={`w-6 h-6 border-2 border-primary rounded-full relative z-10 flex items-center justify-center ${
+        done ? 'bg-primary text-on-primary' : ''
+      }`}>
+        {done && (
+          <span className="material-symbols-outlined text-sm" style={{fontVariationSettings:"'FILL' 1"}}>check</span>
+        )}
+      </div>
+    </article>
+  );
+}
 
-function AmPmArticle({item,onToggle}){const sub=(item.name||'').toLowerCase().includes('trinity')?'Focus':(item.name||'').toLowerCase().includes('nada')?'Sound':'Practice';return(<article className="bg-surface border-border-width-thin border-primary p-4 flex items-center justify-between"><div><h3 className="font-body-lg text-body-lg font-bold mb-1">{item.name||'Meditation'}</h3><p className="font-label-sm text-label-sm text-on-surface-variant uppercase">{sub}</p></div><div className="flex gap-2"><button className="h-10 w-10 border-border-width-thin border-primary bg-primary text-on-primary flex items-center justify-center transition-colors" title="Morning Practice"><span className="material-symbols-outlined text-sm">light_mode</span></button><button className="h-10 w-10 border-border-width-thin border-primary bg-surface text-outline flex items-center justify-center hover:bg-surface-variant transition-colors" title="Evening Practice"><span className="material-symbols-outlined text-sm">dark_mode</span></button></div></article>);}
+function AmPmArticle({ item, onToggle }) {
+  return (
+    <article className="bg-surface border-border-width-thin border-primary p-4 flex items-center justify-between">
+      <div>
+        <h3 className="font-body-lg text-body-lg font-bold mb-1">{item.name || 'Meditation'}</h3>
+        <p className="font-label-sm text-label-sm text-on-surface-variant uppercase">
+          {item.name?.toLowerCase().includes('trinity') ? 'Focus' :
+           item.name?.toLowerCase().includes('nada') ? 'Sound' : 'Practice'}
+        </p>
+      </div>
+      <div className="flex gap-2">
+        <button className="h-10 w-10 border-border-width-thin border-primary bg-primary text-on-primary flex items-center justify-center transition-colors" title="Morning Practice">
+          <span className="material-symbols-outlined text-sm">light_mode</span>
+        </button>
+        <button className="h-10 w-10 border-border-width-thin border-primary bg-surface text-outline flex items-center justify-center hover:bg-surface-variant transition-colors" title="Evening Practice">
+          <span className="material-symbols-outlined text-sm">dark_mode</span>
+        </button>
+      </div>
+    </article>
+  );
+}
