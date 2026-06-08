@@ -4,6 +4,14 @@
 
 @layer base {
   body { @apply antialiased; }
+  button {
+    -webkit-appearance: none;
+    appearance: none;
+    border-radius: 0;
+  }
+  button:disabled {
+    opacity: 1;
+  }
 }
 
 @layer components {

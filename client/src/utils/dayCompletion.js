@@ -63,3 +63,45 @@ export function getDayPillars({ checklist, date }) {
 export function isDayComplete(params) {
   return getDayPillars(params).complete;
 }
+
+/** Friend progress from server-synced toggles only (no local timers). */
+export function getDayPillarsFromServer(checklist) {
+  const akyItems = checklist.filter(i => {
+    const c = (i.category || '').toLowerCase();
+    return c !== 'quick' && c !== 'japa';
+  });
+  const quickItems = checklist.filter(i => (i.category || '').toLowerCase() === 'quick');
+  const japaItem = checklist.find(i => (i.category || '').toLowerCase() === 'japa');
+  const waterItem = quickItems.find(i => (i.name || '').toLowerCase() === 'water');
+  const exerciseItem = quickItems.find(i => (i.name || '').toLowerCase() === 'exercise');
+  const studyItem = quickItems.find(i => (i.name || '').toLowerCase() === 'study');
+  const abhishekamItem = quickItems.find(i => (i.name || '').toLowerCase() === 'abhishekam');
+  const mainKriya = akyItems.find(i => (i.name || '').toLowerCase() === 'main kriya');
+  const kriya2 = akyItems.find(i => (i.name || '').toLowerCase() === 'kriya level 2');
+
+  const akyMet = !!(mainKriya?.completed && kriya2?.completed);
+  const japaMet = !!japaItem?.completed;
+  const waterMet = !!waterItem?.completed;
+  const exerciseMet = !!exerciseItem?.completed;
+  const studyMet = !!studyItem?.completed;
+  const abhishekamMet = !!abhishekamItem?.completed;
+
+  const pillars = [
+    { key: 'aky', label: 'Atma Kriya', met: akyMet },
+    { key: 'japa', label: 'Japa', met: japaMet },
+    { key: 'water', label: 'Water', met: waterMet },
+    { key: 'exercise', label: 'Exercise', met: exerciseMet },
+    { key: 'study', label: 'Study', met: studyMet },
+    { key: 'abhishekam', label: 'Abhishekam', met: abhishekamMet },
+  ];
+
+  const metCount = pillars.filter(p => p.met).length;
+
+  return {
+    pillars,
+    metCount,
+    total: DAY_PILLAR_COUNT,
+    pct: Math.round((metCount / DAY_PILLAR_COUNT) * 100),
+    complete: metCount === DAY_PILLAR_COUNT,
+  };
+}

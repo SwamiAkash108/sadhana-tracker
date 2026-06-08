@@ -77,6 +77,16 @@ async function initSchema() {
     `CREATE INDEX IF NOT EXISTS idx_daily_progress_date ON daily_progress(date)`,
     `CREATE INDEX IF NOT EXISTS idx_friend_requests_recipient ON friend_requests(recipient_id, status)`,
     `CREATE INDEX IF NOT EXISTS idx_friend_requests_requester ON friend_requests(requester_id, status)`,
+    `CREATE TABLE IF NOT EXISTS sangha_nudges (
+      id TEXT PRIMARY KEY,
+      from_user_id TEXT NOT NULL,
+      to_user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (from_user_id) REFERENCES users(id),
+      FOREIGN KEY (to_user_id) REFERENCES users(id),
+      UNIQUE(from_user_id, to_user_id, date)
+    )`,
   ];
 
   for (const sql of ddl) {

@@ -1,10 +1,62 @@
 const express = require('express');
+const webpush = require('web-push');
 const { v4: uuidv4 } = require('uuid');
 const { getDb, getSadhanaDate } = require('../db');
 const { authMiddleware } = require('./auth');
 
 const router = express.Router();
 router.use(authMiddleware);
+
+const VAPID_PUBLIC = process.env.VAPID_PUBLIC_KEY || '';
+const VAPID_PRIVATE = process.env.VAPID_PRIVATE_KEY || '';
+const VAPID_SUBJECT = process.env.VAPID_SUBJECT || 'mailto:admin@sadhana-tracker.local';
+
+if (VAPID_PUBLIC && VAPID_PRIVATE) {
+  webpush.setVapidDetails(VAPID_SUBJECT, VAPID_PUBLIC, VAPID_PRIVATE);
+}
+
+const DAY_PILLAR_COUNT = 6;
+
+function computeDayPillarsFromServer(items, completedIds) {
+  const isDone = (name) => items.some(
+    i => (i.name || '').toLowerCase() === name.toLowerCase() && completedIds.has(i.id)
+  );
+  const akyMet = isDone('Main Kriya') && isDone('Kriya Level 2');
+  const pillars = [
+    { key: 'aky', label: 'Atma Kriya', met: akyMet },
+    { key: 'japa', label: 'Japa', met: isDone('Japa') },
+    { key: 'water', label: 'Water', met: isDone('Water') },
+    { key: 'exercise', label: 'Exercise', met: isDone('Exercise') },
+    { key: 'study', label: 'Study', met: isDone('Study') },
+    { key: 'abhishekam', label: 'Abhishekam', met: isDone('Abhishekam') },
+  ];
+  const metCount = pillars.filter(p => p.met).length;
+  return {
+    pillars,
+    metCount,
+    total: DAY_PILLAR_COUNT,
+    pct: Math.round((metCount / DAY_PILLAR_COUNT) * 100),
+    complete: metCount === DAY_PILLAR_COUNT,
+  };
+}
+
+async function sendPushToUser(db, userId, payload) {
+  if (!VAPID_PUBLIC || !VAPID_PRIVATE) return false;
+  const result = await db.execute('SELECT id, subscription FROM push_subscriptions WHERE user_id = ?', [userId]);
+  if (result.rows.length === 0) return false;
+  const body = JSON.stringify(payload);
+  let sent = false;
+  await Promise.all(result.rows.map(sub =>
+    webpush.sendNotification(JSON.parse(sub.subscription), body)
+      .then(() => { sent = true; })
+      .catch(async err => {
+        if (err.statusCode === 410 || err.statusCode === 404) {
+          await db.execute('DELETE FROM push_subscriptions WHERE id = ?', [sub.id]);
+        }
+      })
+  ));
+  return sent;
+}
 
 function buildMemberProgress(user, items, totalItems, completedIds) {
   const completed = completedIds.size;
@@ -19,6 +71,7 @@ function buildMemberProgress(user, items, totalItems, completedIds) {
   const japaDone = items.some(i => (i.category || '').toLowerCase() === 'japa' && completedIds.has(i.id));
   const quickItems = items.filter(i => (i.category || '').toLowerCase() === 'quick');
   const quickDone = quickItems.filter(i => completedIds.has(i.id)).length;
+  const dayPillars = computeDayPillarsFromServer(items, completedIds);
 
   return {
     ...user,
@@ -31,6 +84,10 @@ function buildMemberProgress(user, items, totalItems, completedIds) {
     japaDone,
     quickDone,
     quickTotal: quickItems.length,
+    pillarsMet: dayPillars.metCount,
+    pillarsTotal: dayPillars.total,
+    dayComplete: dayPillars.complete,
+    pillars: dayPillars.pillars,
   };
 }
 
@@ -603,6 +660,130 @@ router.get('/history/:userId', async (req, res) => {
   } catch (err) {
     console.error('History error:', err);
     res.status(500).json({ error: 'Failed to fetch history.' });
+  }
+});
+
+// GET /api/sadhana/nudges — nudges sent today by current user
+router.get('/nudges', async (req, res) => {
+  try {
+    const db = getDb();
+    const today = getSadhanaDate();
+    const result = await db.execute(
+      'SELECT to_user_id FROM sangha_nudges WHERE from_user_id = ? AND date = ?',
+      [req.userId, today]
+    );
+    res.json({ date: today, nudgedUserIds: result.rows.map(r => r.to_user_id) });
+  } catch (err) {
+    console.error('Nudges list error:', err);
+    res.status(500).json({ error: 'Failed to fetch nudges.' });
+  }
+});
+
+async function recordAndSendNudge(db, fromUserId, toUserId, fromName) {
+  const today = getSadhanaDate();
+  const friendIds = await getFriendIds(db, fromUserId);
+  if (!friendIds.includes(toUserId)) {
+    const err = new Error('Not in your sangha.');
+    err.status = 403;
+    throw err;
+  }
+
+  const existing = await db.execute(
+    'SELECT id FROM sangha_nudges WHERE from_user_id = ? AND to_user_id = ? AND date = ?',
+    [fromUserId, toUserId, today]
+  );
+  if (existing.rows.length > 0) {
+    const err = new Error('Already nudged today.');
+    err.status = 409;
+    throw err;
+  }
+
+  await db.execute(
+    'INSERT INTO sangha_nudges (id, from_user_id, to_user_id, date) VALUES (?, ?, ?, ?)',
+    [uuidv4(), fromUserId, toUserId, today]
+  );
+
+  const pushed = await sendPushToUser(db, toUserId, {
+    title: '🙏 Sangha nudge',
+    body: `${fromName} finished today — time for your sadhana!`,
+    icon: '/icons/icon-192.png',
+    badge: '/icons/icon-72.png',
+    data: { url: '/' },
+    vibrate: [200, 100, 200],
+    tag: 'sangha-nudge',
+    requireInteraction: false,
+  });
+
+  return { pushed };
+}
+
+// POST /api/sadhana/nudge { user_id }
+router.post('/nudge', async (req, res) => {
+  try {
+    const { user_id: toUserId } = req.body;
+    if (!toUserId) return res.status(400).json({ error: 'user_id is required.' });
+    if (toUserId === req.userId) return res.status(400).json({ error: 'Cannot nudge yourself.' });
+
+    const db = getDb();
+    const me = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);
+    const fromName = me.rows[0]?.name || 'A sangha friend';
+
+    const result = await recordAndSendNudge(db, req.userId, toUserId, fromName);
+    res.json({ ok: true, ...result });
+  } catch (err) {
+    if (err.status) return res.status(err.status).json({ error: err.message });
+    console.error('Nudge error:', err);
+    res.status(500).json({ error: 'Failed to send nudge.' });
+  }
+});
+
+// POST /api/sadhana/nudge-all
+router.post('/nudge-all', async (req, res) => {
+  try {
+    const db = getDb();
+    const today = getSadhanaDate();
+    const me = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);
+    const fromName = me.rows[0]?.name || 'A sangha friend';
+
+    const itemsResult = await db.execute('SELECT id, name, category FROM sadhana_items WHERE active = 1');
+    const items = itemsResult.rows;
+    const friendIds = await getFriendIds(db, req.userId);
+
+    const progressResult = await db.execute('SELECT user_id, item_id FROM daily_progress WHERE date = ?', [today]);
+    const progressByUser = {};
+    for (const row of progressResult.rows) {
+      if (!progressByUser[row.user_id]) progressByUser[row.user_id] = new Set();
+      progressByUser[row.user_id].add(row.item_id);
+    }
+
+    const already = await db.execute(
+      'SELECT to_user_id FROM sangha_nudges WHERE from_user_id = ? AND date = ?',
+      [req.userId, today]
+    );
+    const nudgedSet = new Set(already.rows.map(r => r.to_user_id));
+
+    let sent = 0;
+    let skipped = 0;
+    for (const friendId of friendIds) {
+      const completedIds = progressByUser[friendId] || new Set();
+      const { complete } = computeDayPillarsFromServer(items, completedIds);
+      if (complete || nudgedSet.has(friendId)) {
+        skipped++;
+        continue;
+      }
+      try {
+        await recordAndSendNudge(db, req.userId, friendId, fromName);
+        nudgedSet.add(friendId);
+        sent++;
+      } catch (err) {
+        if (err.status === 409) skipped++;
+      }
+    }
+
+    res.json({ ok: true, sent, skipped });
+  } catch (err) {
+    console.error('Nudge-all error:', err);
+    res.status(500).json({ error: 'Failed to nudge sangha.' });
   }
 });
 

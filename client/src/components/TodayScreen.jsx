@@ -8,6 +8,7 @@ import {
 } from '../utils/sadhanaStorage';
 import { getAkySessionLevel, getAkySessionMeta } from '../utils/akyCompletion';
 import { getDayPillars } from '../utils/dayCompletion';
+import SanghaNudgePanel from './SanghaNudgePanel';
 
 const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const [checklist, setChecklist] = useState([]);
@@ -160,6 +161,9 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
                 </span>
               ))}
             </div>
+            {dayComplete && user?.id && (
+              <SanghaNudgePanel userId={user.id} />
+            )}
           </div>
         </div>
         <div className="hidden md:block shrink-0 text-right">
@@ -432,46 +436,58 @@ function ExerciseTracker({ date, completed, onGoalChange }) {
       </div>
 
       <div
-        className={`w-full border-2 p-3 flex items-center justify-between gap-3 transition-colors woodcut-shadow-sm ${
+        className={`w-full border-2 p-3 flex items-center justify-between gap-3 transition-colors ${
           pushupsDone
             ? 'border-[#15803d] bg-[#15803d] text-white'
             : 'border-primary bg-surface'
         }`}
       >
-        <span className="font-label-sm text-label-sm uppercase">Aaradhaka&apos;s Push-Up</span>
-        <div className="flex items-center gap-1 shrink-0">
-          <button
-            type="button"
-            onClick={() => handlePushupChange(-1)}
+        <span className="font-label-sm text-label-sm uppercase min-w-0">Aaradhaka&apos;s Push-Up</span>
+        <div className="flex items-center gap-1.5 shrink-0">
+          <PushupButton
+            label="Decrease push-ups"
             disabled={pushups <= 0}
-            className={`w-8 h-8 border-2 flex items-center justify-center font-label-sm text-label-sm transition-colors disabled:opacity-30 ${
-              pushupsDone
-                ? 'border-white/60 hover:bg-white/20'
-                : 'border-primary hover:bg-secondary hover:text-on-secondary hover:border-secondary'
-            }`}
-            aria-label="Decrease push-ups"
+            done={pushupsDone}
+            onClick={() => handlePushupChange(-1)}
           >
             −
-          </button>
-          <span className="w-8 text-center font-headline-sm text-headline-sm tabular-nums">
+          </PushupButton>
+          <span className="w-9 text-center font-label-sm text-label-sm tabular-nums leading-none">
             {pushups}
           </span>
-          <button
-            type="button"
-            onClick={() => handlePushupChange(1)}
+          <PushupButton
+            label="Increase push-ups"
             disabled={pushups >= PUSHUP_MAX}
-            className={`w-8 h-8 border-2 flex items-center justify-center font-label-sm text-label-sm transition-colors disabled:opacity-30 ${
-              pushupsDone
-                ? 'border-white/60 hover:bg-white/20'
-                : 'border-primary hover:bg-secondary hover:text-on-secondary hover:border-secondary'
-            }`}
-            aria-label="Increase push-ups"
+            done={pushupsDone}
+            onClick={() => handlePushupChange(1)}
           >
             +
-          </button>
+          </PushupButton>
         </div>
       </div>
     </div>
+  );
+}
+
+function PushupButton({ children, disabled, done, onClick, label }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      disabled={disabled}
+      aria-label={label}
+      className={`w-9 h-9 shrink-0 border-2 flex items-center justify-center font-label-sm text-label-sm leading-none transition-colors ${
+        disabled
+          ? done
+            ? 'border-white/40 text-white/40 bg-transparent cursor-not-allowed'
+            : 'border-primary text-outline-variant bg-surface-bright cursor-not-allowed'
+          : done
+            ? 'border-white text-white bg-transparent hover:bg-white/20'
+            : 'border-primary bg-surface text-primary hover:bg-secondary hover:text-on-secondary hover:border-secondary'
+      }`}
+    >
+      {children}
+    </button>
   );
 }
 

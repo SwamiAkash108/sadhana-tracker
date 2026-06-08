@@ -36,6 +36,9 @@ export const api = {
   acceptFriendRequest: (requestId) => request('/sadhana/friends/accept', { method: 'POST', body: JSON.stringify({ request_id: requestId }) }),
   declineFriendRequest: (requestId) => request('/sadhana/friends/decline', { method: 'POST', body: JSON.stringify({ request_id: requestId }) }),
   removeFriend: (userId) => request('/sadhana/friends/remove', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  getNudges: () => request('/sadhana/nudges'),
+  nudgeFriend: (userId) => request('/sadhana/nudge', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
+  nudgeAllFriends: () => request('/sadhana/nudge-all', { method: 'POST' }),
 
   // Notifications
   getVapidKey: () => request('/notifications/vapid-public-key'),
