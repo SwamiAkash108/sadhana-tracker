@@ -162,8 +162,32 @@ export default function TeamScreen() {
         </p>
       </div>
 
-      <section className="border-4 border-primary bg-surface woodcut-shadow p-6">
-        <h3 className="font-headline-sm text-headline-sm uppercase mb-1">Add to Sangha</h3>
+      <section>
+        <h3 className="font-headline-sm text-headline-sm uppercase mb-4">Today&apos;s Practice</h3>
+
+        {members.length === 0 ? (
+          <div className="bg-surface border-4 border-primary woodcut-shadow p-12 text-center">
+            <span className="material-symbols-outlined text-5xl text-outline mb-4">groups</span>
+            <p className="font-body-lg text-body-lg text-on-surface-variant">
+              No sangha members yet. Use Add to Sangha below to find fellow practitioners.
+            </p>
+          </div>
+        ) : (
+          <div className="grid md:grid-cols-2 gap-8">
+            {members.map(m => (
+              <MemberCard
+                key={m.id}
+                member={m}
+                isSelf={m.id === user?.id}
+                removing={actionId === m.id}
+                onRemove={handleRemoveFriend}
+              />
+            ))}
+          </div>
+        )}
+      </section>
+
+      <CollapsibleSection title="Add to Sangha">
         <p className="font-body-md text-body-md text-on-surface-variant mb-4">
           Search by name or email to find practitioners and send a request.
         </p>
@@ -215,18 +239,13 @@ export default function TeamScreen() {
         {!searching && searchQuery.trim().length >= 2 && searchResults.length === 0 && !searchError && (
           <p className="font-label-sm text-label-sm text-on-surface-variant">No practitioners found.</p>
         )}
-      </section>
+      </CollapsibleSection>
 
-      <section className="border-4 border-primary bg-surface woodcut-shadow p-6">
-        <div className="flex items-center justify-between gap-3 mb-4">
-          <h3 className="font-headline-sm text-headline-sm uppercase">Pending Requests</h3>
-          {pendingCount > 0 && (
-            <span className="font-label-sm text-label-sm uppercase bg-secondary text-on-secondary px-2 py-0.5">
-              {pendingCount}
-            </span>
-          )}
-        </div>
-
+      <CollapsibleSection
+        title="Pending Requests"
+        badge={pendingCount > 0 ? pendingCount : null}
+        defaultOpen={incoming.length > 0}
+      >
         {requestsError && (
           <p className="font-label-sm text-label-sm text-secondary mb-4">
             Could not load requests: {requestsError}
@@ -295,33 +314,40 @@ export default function TeamScreen() {
             No pending requests. When someone sends you a request, it will appear here to accept or decline.
           </p>
         )}
-      </section>
-
-      <section>
-        <h3 className="font-headline-sm text-headline-sm uppercase mb-4">Today&apos;s Practice</h3>
-
-        {members.length === 0 ? (
-          <div className="bg-surface border-4 border-primary woodcut-shadow p-12 text-center">
-            <span className="material-symbols-outlined text-5xl text-outline mb-4">groups</span>
-            <p className="font-body-lg text-body-lg text-on-surface-variant">
-              No sangha members yet. Search above to add fellow practitioners.
-            </p>
-          </div>
-        ) : (
-          <div className="grid md:grid-cols-2 gap-8">
-            {members.map(m => (
-              <MemberCard
-                key={m.id}
-                member={m}
-                isSelf={m.id === user?.id}
-                removing={actionId === m.id}
-                onRemove={handleRemoveFriend}
-              />
-            ))}
-          </div>
-        )}
-      </section>
+      </CollapsibleSection>
     </div>
+  );
+}
+
+function CollapsibleSection({ title, badge, defaultOpen = false, children }) {
+  const [open, setOpen] = useState(defaultOpen);
+
+  useEffect(() => {
+    if (defaultOpen) setOpen(true);
+  }, [defaultOpen]);
+
+  return (
+    <section className="border-4 border-primary bg-surface woodcut-shadow">
+      <button
+        type="button"
+        onClick={() => setOpen(v => !v)}
+        className="w-full flex items-center justify-between gap-3 p-4 text-left hover:bg-surface-variant transition-colors"
+        aria-expanded={open}
+      >
+        <span className="font-headline-sm text-headline-sm uppercase">{title}</span>
+        <span className="flex items-center gap-2 shrink-0">
+          {badge != null && (
+            <span className="font-label-sm text-label-sm uppercase bg-secondary text-on-secondary px-2 py-0.5">
+              {badge}
+            </span>
+          )}
+          <span className="material-symbols-outlined text-primary transition-transform duration-200" style={{ transform: open ? 'rotate(180deg)' : undefined }}>
+            expand_more
+          </span>
+        </span>
+      </button>
+      {open && <div className="px-6 pb-6 pt-2 border-t-2 border-primary">{children}</div>}
+    </section>
   );
 }
 
