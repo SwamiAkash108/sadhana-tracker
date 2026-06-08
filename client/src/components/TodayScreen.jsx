@@ -16,8 +16,14 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pillarTick, setPillarTick] = useState(0);
+  const [now, setNow] = useState(() => new Date());
   const japaRef = useRef(null);
   const bumpPillars = () => setPillarTick(t => t + 1);
+
+  useEffect(() => {
+    const id = setInterval(() => setNow(new Date()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   useImperativeHandle(ref, () => ({
     startJapa: () => japaRef.current?.start(),
@@ -109,14 +115,18 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
     streak < 30 ? 'Strong commitment. Keep it up!' :
     'Incredible dedication. You inspire others.';
 
+  const dateLabel = today.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
+  const timeLabel = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
+
   return (
     <div className="space-y-8 md:space-y-12">
       <header className="flex flex-col md:flex-row md:justify-between md:items-start border-b-4 border-primary pb-6 gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-4">
             <h2 className="font-headline-xl text-headline-xl text-primary">Today</h2>
-            <p className="font-label-sm text-label-sm uppercase bg-primary text-on-primary px-3 py-1 shrink-0 md:hidden">
-              {today.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+            <p className="font-label-sm text-label-sm uppercase bg-primary text-on-primary px-3 py-1 shrink-0 md:hidden text-right">
+              <span className="block">{dateLabel}</span>
+              <span className="block tabular-nums normal-case">{timeLabel}</span>
             </p>
           </div>
           <div className="mt-4">
@@ -163,9 +173,10 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
             </div>
           </div>
         </div>
-        <div className="hidden md:block shrink-0">
+        <div className="hidden md:block shrink-0 text-right">
           <p className="font-label-sm text-label-sm uppercase bg-primary text-on-primary px-3 py-1">
-            {today.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' })}
+            <span className="block">{dateLabel}</span>
+            <span className="block tabular-nums normal-case">{timeLabel}</span>
           </p>
         </div>
       </header>
