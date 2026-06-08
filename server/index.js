@@ -44,6 +44,7 @@ if (fs.existsSync(clientDist)) {
     console.log('Database initialized.');
   } catch (err) {
     console.error('Database init failed:', err.message);
+    console.error(err.stack);
     process.exit(1);
   }
 

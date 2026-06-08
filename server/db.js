@@ -1,4 +1,4 @@
-const { createClient } = require('@libsql/client');
+const { createClient } = require('@libsql/client/http');
 const { v4: uuidv4 } = require('uuid');
 
 const TURSO_URL = process.env.TURSO_DATABASE_URL;
