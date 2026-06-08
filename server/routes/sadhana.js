@@ -355,6 +355,30 @@ router.get('/stats/month', async (req, res) => {
   }
 });
 
+// GET /api/sadhana/friends/directory — all practitioners on the server
+router.get('/friends/directory', async (req, res) => {
+  try {
+    const db = getDb();
+    const usersResult = await db.execute(
+      `SELECT id, name, email FROM users
+       WHERE id != ?
+       ORDER BY name ASC`,
+      [req.userId]
+    );
+
+    const relationMap = await getRelationMap(db, req.userId);
+    const users = usersResult.rows.map(user => ({
+      ...user,
+      relation: relationMap[user.id] || 'none',
+    }));
+
+    res.json({ users });
+  } catch (err) {
+    console.error('Friend directory error:', err);
+    res.status(500).json({ error: 'Failed to load practitioners.' });
+  }
+});
+
 // GET /api/sadhana/friends/search?q=
 router.get('/friends/search', async (req, res) => {
   try {

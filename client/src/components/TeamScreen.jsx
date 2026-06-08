@@ -9,9 +9,8 @@ export default function TeamScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
-  const [searchResults, setSearchResults] = useState([]);
-  const [searching, setSearching] = useState(false);
-  const [searchError, setSearchError] = useState('');
+  const [practitioners, setPractitioners] = useState([]);
+  const [directoryError, setDirectoryError] = useState('');
   const [actionId, setActionId] = useState(null);
   const [requestsError, setRequestsError] = useState('');
 
@@ -36,48 +35,36 @@ export default function TeamScreen() {
       setRequestsError(err.message);
     }
 
+    try {
+      const directoryData = await api.listPractitioners();
+      setPractitioners(directoryData.users || []);
+      setDirectoryError('');
+    } catch (err) {
+      setPractitioners([]);
+      setDirectoryError(err.message);
+    }
+
     setError(teamError);
     setLoading(false);
   }, []);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
 
-  useEffect(() => {
-    const q = searchQuery.trim();
-    if (q.length < 2) {
-      setSearchResults([]);
-      setSearchError('');
-      return;
-    }
-
-    const timer = setTimeout(async () => {
-      setSearching(true);
-      setSearchError('');
-      try {
-        const data = await api.searchFriends(q);
-        setSearchResults(data.users || []);
-      } catch (err) {
-        setSearchError(err.message);
-        setSearchResults([]);
-      } finally {
-        setSearching(false);
-      }
-    }, 300);
-
-    return () => clearTimeout(timer);
-  }, [searchQuery]);
+  const refreshDirectory = async () => {
+    const directoryData = await api.listPractitioners();
+    setPractitioners(directoryData.users || []);
+  };
 
   const handleSendRequest = async (userId) => {
     setActionId(userId);
     try {
       await api.sendFriendRequest(userId);
-      const [requestData] = await Promise.all([api.getFriendRequests()]);
+      const requestData = await api.getFriendRequests();
       setRequests(requestData);
-      const data = await api.searchFriends(searchQuery.trim());
-      setSearchResults(data.users || []);
+      await refreshDirectory();
       await fetchAll();
     } catch (err) {
-      setSearchError(err.message);
+      setDirectoryError(err.message);
     } finally {
       setActionId(null);
     }
@@ -88,10 +75,6 @@ export default function TeamScreen() {
     try {
       await api.acceptFriendRequest(requestId);
       await fetchAll();
-      if (searchQuery.trim().length >= 2) {
-        const data = await api.searchFriends(searchQuery.trim());
-        setSearchResults(data.users || []);
-      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -117,10 +100,6 @@ export default function TeamScreen() {
     try {
       await api.removeFriend(userId);
       await fetchAll();
-      if (searchQuery.trim().length >= 2) {
-        const data = await api.searchFriends(searchQuery.trim());
-        setSearchResults(data.users || []);
-      }
     } catch (err) {
       setError(err.message);
     } finally {
@@ -151,6 +130,13 @@ export default function TeamScreen() {
   const outgoing = requests.outgoing || [];
   const pendingCount = incoming.length + outgoing.length;
   const incomingByUserId = Object.fromEntries(incoming.map(r => [r.user_id, r.id]));
+
+  const q = searchQuery.trim().toLowerCase();
+  const filteredPractitioners = q
+    ? practitioners.filter(u =>
+        u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
+      )
+    : practitioners;
 
   return (
     <div className="space-y-10">
@@ -189,7 +175,7 @@ export default function TeamScreen() {
 
       <CollapsibleSection title="Add to Sangha">
         <p className="font-body-md text-body-md text-on-surface-variant mb-4">
-          Search by name or email to find practitioners and send a request.
+          Browse everyone on the server and send a Sangha request, or filter by name or email.
         </p>
 
         <div className="relative mb-4">
@@ -198,26 +184,22 @@ export default function TeamScreen() {
             type="search"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Search practitioners…"
+            placeholder="Filter practitioners…"
             className="w-full border-2 border-primary bg-surface-bright pl-10 pr-4 py-3 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
           />
         </div>
 
-        {searchQuery.trim().length > 0 && searchQuery.trim().length < 2 && (
-          <p className="font-label-sm text-label-sm text-on-surface-variant">Type at least 2 characters to search.</p>
+        {directoryError && (
+          <p className="font-label-sm text-label-sm text-secondary mb-3">{directoryError}</p>
         )}
 
-        {searching && (
-          <p className="font-label-sm text-label-sm text-on-surface-variant">Searching…</p>
-        )}
-
-        {searchError && (
-          <p className="font-label-sm text-label-sm text-secondary mb-3">{searchError}</p>
-        )}
-
-        {searchResults.length > 0 && (
-          <ul className="divide-y-2 divide-primary border-2 border-primary">
-            {searchResults.map(u => (
+        {practitioners.length === 0 && !directoryError ? (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">
+            No other practitioners on the server yet.
+          </p>
+        ) : filteredPractitioners.length > 0 ? (
+          <ul className="divide-y-2 divide-primary border-2 border-primary max-h-80 overflow-y-auto">
+            {filteredPractitioners.map(u => (
               <li key={u.id} className="flex items-center justify-between gap-3 p-3 bg-surface-bright">
                 <div className="min-w-0">
                   <p className="font-body-md text-body-md text-primary truncate">{u.name}</p>
@@ -234,10 +216,8 @@ export default function TeamScreen() {
               </li>
             ))}
           </ul>
-        )}
-
-        {!searching && searchQuery.trim().length >= 2 && searchResults.length === 0 && !searchError && (
-          <p className="font-label-sm text-label-sm text-on-surface-variant">No practitioners found.</p>
+        ) : (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">No practitioners match your filter.</p>
         )}
       </CollapsibleSection>
 

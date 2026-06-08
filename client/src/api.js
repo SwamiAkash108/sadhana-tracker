@@ -31,6 +31,7 @@ export const api = {
   getTeam: () => request('/sadhana/team'),
   getUserHistory: (userId, days = 7) => request(`/sadhana/history/${userId}?days=${days}`),
   searchFriends: (q) => request(`/sadhana/friends/search?q=${encodeURIComponent(q)}`),
+  listPractitioners: () => request('/sadhana/friends/directory'),
   getFriendRequests: () => request('/sadhana/friends/requests'),
   sendFriendRequest: (userId) => request('/sadhana/friends/request', { method: 'POST', body: JSON.stringify({ user_id: userId }) }),
   acceptFriendRequest: (requestId) => request('/sadhana/friends/accept', { method: 'POST', body: JSON.stringify({ request_id: requestId }) }),
