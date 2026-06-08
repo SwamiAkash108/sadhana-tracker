@@ -1,14 +1,17 @@
 // Service Worker for Sadhana Tracker PWA
-const CACHE_NAME = 'sadhana-tracker-v1';
+const CACHE_NAME = 'sadhana-tracker-v2';
 
-// Install event — cache app shell
 self.addEventListener('install', (event) => {
   self.skipWaiting();
 });
 
-// Activate event — clean old caches
 self.addEventListener('activate', (event) => {
   event.waitUntil(self.clients.claim());
+});
+
+// Required for Chrome Android installability
+self.addEventListener('fetch', (event) => {
+  event.respondWith(fetch(event.request));
 });
 
 // Push notification handler

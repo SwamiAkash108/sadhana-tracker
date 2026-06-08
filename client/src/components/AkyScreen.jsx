@@ -9,12 +9,32 @@ import {
   getAkyCounts, getAkySessionLevel, getAkySessionMeta, getAkyGreenChecklist, AKY_COLORS,
 } from '../utils/akyCompletion';
 
+function isKriyaLevelItem(item) {
+  const name = (item.name || '').toLowerCase();
+  return name === 'kriya level 2' || name === 'kriya level 3';
+}
+
+function itemBelongsInSection(item, sectionKey) {
+  const cat = (item.category || '').toLowerCase();
+  const name = (item.name || '').toLowerCase();
+  if (sectionKey === 'kriya') {
+    return cat === 'kriya' || name === 'kriya level 2' || name === 'kriya level 3';
+  }
+  return cat === sectionKey;
+}
+
+function kriyaSortOrder(item) {
+  const name = (item.name || '').toLowerCase();
+  if (name === 'main kriya') return 1;
+  if (name === 'kriya level 2') return 2;
+  if (name === 'kriya level 3') return 3;
+  return item.sort_order ?? 99;
+}
 const SECTIONS = [
   { key: 'kriya', title: 'I. Core Kriya' },
-  { key: 'pranayama', title: 'II. Pranayama' },
-  { key: 'mudras', title: 'III. Mudras & Asanas' },
-  { key: 'meditation', title: 'IV. Meditation' },
-  { key: 'advanced', title: 'V. Advanced' },
+  { key: 'meditation', title: 'II. Meditation' },
+  { key: 'pranayama', title: 'III. Pranayama' },
+  { key: 'mudras', title: 'IV. Mudras & Asanas' },
 ];
 
 export default function AkyScreen({ onClose }) {
@@ -28,7 +48,7 @@ export default function AkyScreen({ onClose }) {
     setLoading(true);
     try {
       const data = await api.getToday();
-      setItems(data.checklist.filter(i => isAkyCategory(i.category)));
+      setItems(data.checklist.filter(i => isAkyCategory(i.category) || isKriyaLevelItem(i)));
       setDate(data.date);
       setError('');
     } catch (err) {
@@ -168,10 +188,19 @@ export default function AkyScreen({ onClose }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-gutter">
         {SECTIONS.map(section => {
-          const sectionItems = items.filter(i => (i.category || '').toLowerCase() === section.key);
+          const sectionItems = items
+            .filter(i => itemBelongsInSection(i, section.key))
+            .sort((a, b) => (
+              section.key === 'kriya'
+                ? kriyaSortOrder(a) - kriyaSortOrder(b)
+                : (a.sort_order ?? 0) - (b.sort_order ?? 0)
+            ));
           if (sectionItems.length === 0) return null;
           return (
-            <section key={section.key} className="flex flex-col gap-6">
+            <section
+              key={section.key}
+              className={`flex flex-col gap-6 ${section.key === 'kriya' || section.key === 'meditation' ? 'lg:col-span-2' : ''}`}
+            >
               <h2 className="font-headline-md text-headline-md border-b border-primary pb-4">{section.title}</h2>
               {sectionItems.map(item => (
                 <ItemCard
@@ -208,7 +237,7 @@ export default function AkyScreen({ onClose }) {
 
 function itemTierAccent(item, sessionLevel) {
   const name = (item.name || '').toLowerCase();
-  const isCore = name === 'main kriya' || name === 'kriya level 2';
+  const isCore = name === 'main kriya' || name === 'kriya level 2' || name === 'kriya level 3';
   if (sessionLevel === 'green') return AKY_COLORS.green;
   if (sessionLevel === 'orange' && isCore) return AKY_COLORS.orange;
   return null;

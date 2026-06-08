@@ -28,13 +28,10 @@ export function isAkyCategory(category) {
   return c !== 'japa' && c !== 'quick';
 }
 
-/** Most practices allow 2 done marks per day (AM + PM). Mudras toggles: once. Kriya Level 2: twice. */
+/** Most AKY practices allow 2 done marks per day (AM + PM). */
 export function getMaxDoneSessions(item) {
-  const name = (item.name || '').toLowerCase();
-  if (name === 'kriya level 2') return 2;
-  const cat = (item.category || '').toLowerCase();
+  if (isAkyCategory(item.category)) return 2;
   const type = item.item_type || 'toggle';
-  if (cat === 'mudras' || cat === 'advanced') return 1;
   if (type === 'toggle') return 1;
   return 2;
 }

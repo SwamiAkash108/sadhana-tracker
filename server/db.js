@@ -90,20 +90,21 @@ async function initSchema() {
       { name: 'Suka Purvaka', description: 'Easy breathing — 20 rounds', emoji: '🌬️', sort_order: 1, category: 'pranayama', type: 'counter', target: 20 },
       { name: 'Nadhi Shuddhi', description: 'Alternate nostril cleansing', emoji: '🫧', sort_order: 2, category: 'pranayama', type: 'counter', target: 20 },
       { name: 'Main Kriya', description: 'Atma Kriya rounds', emoji: '🔥', sort_order: 3, category: 'kriya', type: 'counter', target: 6, am_pm: true },
-      { name: 'Khecari Mudra', description: 'Tongue lock gesture', emoji: '👁️', sort_order: 4, category: 'mudras', type: 'toggle' },
-      { name: 'Maha Mudra', description: 'Great seal pose — 3 rounds', emoji: '🤲', sort_order: 5, category: 'mudras', type: 'counter', target: 3 },
-      { name: 'Kurmasana', description: 'Tortoise pose', emoji: '🐢', sort_order: 6, category: 'mudras', type: 'toggle' },
-      { name: 'Simhasana', description: 'Lion pose — 5 rounds', emoji: '🦁', sort_order: 7, category: 'mudras', type: 'counter', target: 5 },
-      { name: 'Svastikasana', description: 'Auspicious pose', emoji: '🪷', sort_order: 8, category: 'mudras', type: 'toggle' },
-      { name: 'Shavasana', description: 'Corpse pose relaxation', emoji: '🧎', sort_order: 9, category: 'mudras', type: 'toggle' },
-      { name: 'Trinity Meditation', description: 'Triple focus meditation — 5 rounds', emoji: '🧘', sort_order: 10, category: 'meditation', type: 'counter', target: 5 },
-      { name: 'Nada Kriya', description: 'Sound meditation — up to 20 min', emoji: '🎵', sort_order: 11, category: 'meditation', type: 'timer', target: 1200 },
-      { name: 'Kriya Level 2', description: 'Advanced kriya practice', emoji: '⭐', sort_order: 12, category: 'advanced', type: 'toggle' },
-      { name: 'Japa', description: 'Hare Krishna mahamantra chanting — 60 min', emoji: '📿', sort_order: 13, category: 'japa', type: 'timer', target: 3600 },
-      { name: 'Exercise', description: 'Physical workout — 10 min minimum', emoji: '🏃', sort_order: 14, category: 'quick', type: 'toggle' },
-      { name: 'Water', description: 'Hydration — 2 litres', emoji: '💧', sort_order: 15, category: 'quick', type: 'toggle' },
-      { name: 'Study', description: 'Scriptural study & reflection', emoji: '📖', sort_order: 16, category: 'quick', type: 'toggle' },
-      { name: 'Abhishekam', description: 'Sacred bathing ritual', emoji: '🪷', sort_order: 17, category: 'quick', type: 'toggle' },
+      { name: 'Kriya Level 2', description: 'Advanced kriya practice', emoji: '⭐', sort_order: 4, category: 'kriya', type: 'toggle' },
+      { name: 'Kriya Level 3', description: 'Advanced kriya practice', emoji: '✨', sort_order: 5, category: 'kriya', type: 'toggle' },
+      { name: 'Khecari Mudra', description: 'Tongue lock gesture', emoji: '👁️', sort_order: 6, category: 'mudras', type: 'toggle' },
+      { name: 'Maha Mudra', description: 'Great seal pose — 3 rounds', emoji: '🤲', sort_order: 7, category: 'mudras', type: 'counter', target: 3 },
+      { name: 'Kurmasana', description: 'Tortoise pose', emoji: '🐢', sort_order: 8, category: 'mudras', type: 'toggle' },
+      { name: 'Simhasana', description: 'Lion pose — 5 rounds', emoji: '🦁', sort_order: 9, category: 'mudras', type: 'counter', target: 5 },
+      { name: 'Svastikasana', description: 'Auspicious pose', emoji: '🪷', sort_order: 10, category: 'mudras', type: 'toggle' },
+      { name: 'Shavasana', description: 'Corpse pose relaxation', emoji: '🧎', sort_order: 11, category: 'mudras', type: 'toggle' },
+      { name: 'Trinity Meditation', description: 'Triple focus meditation — 5 rounds', emoji: '🧘', sort_order: 12, category: 'meditation', type: 'counter', target: 5 },
+      { name: 'Nada Kriya', description: 'Sound meditation — up to 20 min', emoji: '🎵', sort_order: 13, category: 'meditation', type: 'timer', target: 1200 },
+      { name: 'Japa', description: 'Hare Krishna mahamantra chanting — 60 min', emoji: '📿', sort_order: 14, category: 'japa', type: 'timer', target: 3600 },
+      { name: 'Exercise', description: 'Physical workout — 10 min minimum', emoji: '🏃', sort_order: 15, category: 'quick', type: 'toggle' },
+      { name: 'Water', description: 'Hydration — 2 litres', emoji: '💧', sort_order: 16, category: 'quick', type: 'toggle' },
+      { name: 'Study', description: 'Scriptural study & reflection', emoji: '📖', sort_order: 17, category: 'quick', type: 'toggle' },
+      { name: 'Abhishekam', description: 'Sacred bathing ritual', emoji: '🪷', sort_order: 18, category: 'quick', type: 'toggle' },
     ];
 
     const stmts = defaults.map(item => ({
@@ -111,6 +112,34 @@ async function initSchema() {
       args: [uuidv4(), item.name, item.description, item.emoji, item.sort_order, item.category, item.type, item.target || 0, item.am_pm ? 1 : 0],
     }));
     await client.batch(stmts);
+  }
+
+  await migrateKriyaLevels(client);
+}
+
+async function migrateKriyaLevels(client) {
+  const specs = [
+    { name: 'Kriya Level 2', emoji: '⭐', sort_order: 4 },
+    { name: 'Kriya Level 3', emoji: '✨', sort_order: 5 },
+  ];
+
+  for (const spec of specs) {
+    const existing = await client.execute({
+      sql: 'SELECT id FROM sadhana_items WHERE lower(name) = lower(?)',
+      args: [spec.name],
+    });
+
+    if (existing.rows.length === 0) {
+      await client.execute({
+        sql: 'INSERT INTO sadhana_items (id, name, description, emoji, sort_order, category, item_type, target, am_pm, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [uuidv4(), spec.name, 'Advanced kriya practice', spec.emoji, spec.sort_order, 'kriya', 'toggle', 0, 0, 1],
+      });
+    } else {
+      await client.execute({
+        sql: "UPDATE sadhana_items SET category = 'kriya', sort_order = ?, active = 1 WHERE lower(name) = lower(?)",
+        args: [spec.sort_order, spec.name],
+      });
+    }
   }
 }
 

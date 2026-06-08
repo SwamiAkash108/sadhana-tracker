@@ -2,15 +2,22 @@ import { useState, useEffect } from 'react';
 import {
   canShowInstallPrompt,
   dismissInstallPrompt,
+  getDeferredInstallPrompt,
   isAndroid,
   isIOS,
+  isIOSInAppBrowser,
+  isIOSSafari,
+  PWA_INSTALL_AVAILABLE,
+  PWA_INSTALLED,
+  triggerInstallPrompt,
+  waitForInstallPrompt,
 } from '../utils/pwaInstall';
 
 export default function InstallPrompt({ variant = 'icon' }) {
   const [ready, setReady] = useState(false);
   const [visible, setVisible] = useState(false);
   const [showModal, setShowModal] = useState(false);
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [canInstall, setCanInstall] = useState(!!getDeferredInstallPrompt());
   const [installing, setInstalling] = useState(false);
 
   useEffect(() => {
@@ -20,38 +27,54 @@ export default function InstallPrompt({ variant = 'icon' }) {
     }
 
     setVisible(true);
-
-    const onInstallable = (e) => {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    };
-
-    window.addEventListener('beforeinstallprompt', onInstallable);
+    setCanInstall(!!getDeferredInstallPrompt());
     setReady(true);
 
-    return () => window.removeEventListener('beforeinstallprompt', onInstallable);
+    const onAvailable = () => setCanInstall(true);
+    const onInstalled = () => {
+      setVisible(false);
+      setShowModal(false);
+      setCanInstall(false);
+    };
+
+    window.addEventListener(PWA_INSTALL_AVAILABLE, onAvailable);
+    window.addEventListener(PWA_INSTALLED, onInstalled);
+
+    return () => {
+      window.removeEventListener(PWA_INSTALL_AVAILABLE, onAvailable);
+      window.removeEventListener(PWA_INSTALLED, onInstalled);
+    };
   }, []);
 
   if (!ready || !visible) return null;
 
   async function handleInstall() {
-    if (deferredPrompt) {
-      setInstalling(true);
-      try {
-        await deferredPrompt.prompt();
-        const { outcome } = await deferredPrompt.userChoice;
+    if (isIOS()) {
+      setShowModal(true);
+      return;
+    }
+
+    setInstalling(true);
+    try {
+      let prompt = getDeferredInstallPrompt();
+      if (!prompt) {
+        prompt = await waitForInstallPrompt();
+      }
+
+      if (prompt) {
+        const outcome = await triggerInstallPrompt(prompt);
         if (outcome === 'accepted') {
           setVisible(false);
           setShowModal(false);
         }
-        setDeferredPrompt(null);
-      } finally {
-        setInstalling(false);
+        setCanInstall(!!getDeferredInstallPrompt());
+        return;
       }
-      return;
-    }
 
-    setShowModal(true);
+      setShowModal(true);
+    } finally {
+      setInstalling(false);
+    }
   }
 
   function handleDismiss() {
@@ -61,6 +84,15 @@ export default function InstallPrompt({ variant = 'icon' }) {
   }
 
   const platform = isIOS() ? 'ios' : isAndroid() ? 'android' : 'other';
+  const installLabel = installing
+    ? 'Installing…'
+    : canInstall
+      ? 'Install app'
+      : platform === 'ios'
+        ? 'Add to Home Screen'
+        : platform === 'android'
+          ? 'Add to home screen'
+          : 'How to install';
 
   if (variant === 'banner') {
     return (
@@ -74,7 +106,9 @@ export default function InstallPrompt({ variant = 'icon' }) {
                   Add to Home Screen
                 </p>
                 <p className="font-body-md text-body-md text-on-surface-variant mb-4">
-                  Install Sadhana on your {platform === 'ios' ? 'iPhone' : 'phone'} for quick access from your home screen.
+                  {platform === 'ios'
+                    ? 'Install Sadhana on your iPhone from Safari for quick access from your home screen.'
+                    : 'Install Sadhana on your phone for quick access from your home screen.'}
                 </p>
                 <div className="flex flex-wrap gap-2">
                   <button
@@ -83,7 +117,7 @@ export default function InstallPrompt({ variant = 'icon' }) {
                     disabled={installing}
                     className="bg-primary text-on-primary px-4 py-2 font-label-sm text-label-sm uppercase tracking-wider hover:bg-secondary transition-colors disabled:opacity-50"
                   >
-                    {deferredPrompt ? (installing ? 'Installing…' : 'Install app') : 'How to install'}
+                    {installLabel}
                   </button>
                   <button
                     type="button"
@@ -111,8 +145,8 @@ export default function InstallPrompt({ variant = 'icon' }) {
         onClick={handleInstall}
         disabled={installing}
         className="p-2 rounded-full transition-colors hover:bg-surface-variant shrink-0 disabled:opacity-50"
-        title="Add to Home Screen"
-        aria-label="Add to Home Screen"
+        title={canInstall ? 'Install app' : 'Add to Home Screen'}
+        aria-label={canInstall ? 'Install app' : 'Add to Home Screen'}
       >
         <span className="material-symbols-outlined text-primary">install_mobile</span>
       </button>
@@ -124,27 +158,43 @@ export default function InstallPrompt({ variant = 'icon' }) {
 }
 
 function InstallInstructions({ platform, onClose }) {
-  const steps =
-    platform === 'ios'
-      ? [
-          'Tap the Share button at the bottom of Safari (square with an arrow pointing up).',
-          'Scroll down and tap "Add to Home Screen".',
-          'Tap "Add" in the top-right corner.',
-        ]
+  const inAppBrowser = platform === 'ios' && isIOSInAppBrowser();
+
+  const steps = inAppBrowser
+    ? [
+        'Tap the menu (···) or Share icon in this app\'s browser.',
+        'Choose "Open in Safari" (or copy the link and paste it into Safari).',
+        'In Safari, tap Share at the bottom (square with arrow pointing up).',
+        'Scroll down, tap "Add to Home Screen", then tap "Add".',
+      ]
+    : platform === 'ios'
+      ? isIOSSafari()
+        ? [
+            'Tap the Share button at the bottom of Safari (square with arrow pointing up).',
+            'Scroll down in the share menu.',
+            'Tap "Add to Home Screen".',
+            'Tap "Add" in the top-right corner.',
+          ]
+        : [
+            'Open this page in Safari for the best install experience.',
+            'In Safari, tap Share at the bottom (square with arrow pointing up).',
+            'Scroll down and tap "Add to Home Screen".',
+            'Tap "Add" in the top-right corner.',
+          ]
       : [
-          'Tap the menu (⋮) in the top-right of Chrome.',
-          'Tap "Install app" or "Add to Home screen".',
-          'Confirm to add Sadhana to your home screen.',
+          'Look for an "Install app" banner at the bottom of Chrome and tap it.',
+          'If you do not see it, tap ⋮ (three dots) next to the address bar.',
+          'Tap "Install app" or "Add to Home screen", then confirm.',
         ];
 
   return (
     <div
-      className="fixed inset-0 z-[100] flex items-end sm:items-center justify-center p-4 bg-black/40"
+      className="fixed inset-0 z-[100] flex items-end justify-center p-4 pb-6 bg-black/40"
       onClick={onClose}
       role="presentation"
     >
       <div
-        className="bg-surface border-4 border-primary p-6 w-full max-w-sm shadow-none"
+        className="bg-surface border-4 border-primary p-6 w-full max-w-sm max-h-[min(85vh,32rem)] overflow-y-auto shadow-none"
         onClick={(e) => e.stopPropagation()}
         role="dialog"
         aria-labelledby="install-title"
@@ -162,11 +212,28 @@ function InstallInstructions({ platform, onClose }) {
             <span className="material-symbols-outlined text-primary">close</span>
           </button>
         </div>
+
+        {inAppBrowser && (
+          <div className="mb-4 border-2 border-secondary bg-surface-variant p-3 font-body-md text-body-md text-on-background">
+            Open Sadhana in <strong>Safari</strong> first — in-app browsers cannot add to the home screen.
+          </div>
+        )}
+
+        {platform === 'ios' && isIOSSafari() && (
+          <div className="mb-4 flex items-center gap-3 border-2 border-primary p-3 bg-surface">
+            <span className="material-symbols-outlined text-primary text-3xl shrink-0">ios_share</span>
+            <p className="font-label-sm text-label-sm text-on-surface-variant">
+              Use the Share button in Safari&apos;s bottom toolbar.
+            </p>
+          </div>
+        )}
+
         <p className="font-body-md text-body-md text-on-surface-variant mb-4">
           {platform === 'ios'
             ? 'Install Sadhana on your iPhone like a native app:'
             : 'Install Sadhana on your Android phone like a native app:'}
         </p>
+
         <ol className="space-y-3 mb-6">
           {steps.map((step, i) => (
             <li key={i} className="flex gap-3 font-body-md text-body-md text-on-background">
@@ -177,6 +244,7 @@ function InstallInstructions({ platform, onClose }) {
             </li>
           ))}
         </ol>
+
         <button
           type="button"
           onClick={onClose}
