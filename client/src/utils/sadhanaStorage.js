@@ -6,7 +6,9 @@ const EXERCISE_KEY = 'sadhana_exercise';
 
 export const WATER_GLASS_ML = 250;
 export const WATER_GLASS_COUNT = 8;
-export const WATER_GOAL_ML = WATER_GLASS_ML * WATER_GLASS_COUNT;
+export const WATER_BOTTLE_ML = 750;
+export const WATER_BOTTLE_COUNT = 3;
+export const WATER_GOAL_ML = 2000;
 
 function readStore(key) {
   try {
@@ -108,34 +110,80 @@ export function setJapaState(date, elapsed, running) {
   writeStore(JAPA_KEY, { date, elapsed, running: !!running });
 }
 
-export function getWaterGlasses(date) {
-  const store = readStore(WATER_KEY);
-  const saved = store[date];
-  if (!Array.isArray(saved) || saved.length !== WATER_GLASS_COUNT) {
-    return Array(WATER_GLASS_COUNT).fill(false);
+function emptyWaterState() {
+  return {
+    glasses: Array(WATER_GLASS_COUNT).fill(false),
+    bottles: Array(WATER_BOTTLE_COUNT).fill(false),
+  };
+}
+
+function normalizeWaterState(saved) {
+  if (Array.isArray(saved)) {
+    const glasses = saved.length === WATER_GLASS_COUNT
+      ? saved
+      : Array(WATER_GLASS_COUNT).fill(false);
+    return { glasses, bottles: Array(WATER_BOTTLE_COUNT).fill(false) };
   }
-  return saved;
+  if (saved && Array.isArray(saved.glasses)) {
+    const glasses = saved.glasses.length === WATER_GLASS_COUNT
+      ? saved.glasses
+      : Array(WATER_GLASS_COUNT).fill(false);
+    const bottles = Array.isArray(saved.bottles) && saved.bottles.length === WATER_BOTTLE_COUNT
+      ? saved.bottles
+      : Array(WATER_BOTTLE_COUNT).fill(false);
+    return { glasses, bottles };
+  }
+  return emptyWaterState();
+}
+
+export function getWaterState(date) {
+  const store = readStore(WATER_KEY);
+  return normalizeWaterState(store[date]);
+}
+
+export function getWaterGlasses(date) {
+  return getWaterState(date).glasses;
+}
+
+export function setWaterState(date, state) {
+  const store = readStore(WATER_KEY);
+  store[date] = state;
+  writeStore(WATER_KEY, store);
+  return state;
 }
 
 export function setWaterGlasses(date, glasses) {
-  const store = readStore(WATER_KEY);
-  store[date] = glasses;
-  writeStore(WATER_KEY, store);
-  return glasses;
+  const state = getWaterState(date);
+  state.glasses = glasses;
+  return setWaterState(date, state);
 }
 
 export function toggleWaterGlass(date, index) {
-  const glasses = getWaterGlasses(date);
-  glasses[index] = !glasses[index];
-  return setWaterGlasses(date, glasses);
+  const state = getWaterState(date);
+  state.glasses[index] = !state.glasses[index];
+  return setWaterState(date, state);
 }
 
-export function getWaterMl(glasses) {
-  return glasses.filter(Boolean).length * WATER_GLASS_ML;
+export function toggleWaterBottle(date, index) {
+  const state = getWaterState(date);
+  state.bottles[index] = !state.bottles[index];
+  return setWaterState(date, state);
 }
 
-export function isWaterGoalMet(glasses) {
-  return glasses.every(Boolean);
+export function getWaterMl(stateOrGlasses) {
+  if (Array.isArray(stateOrGlasses)) {
+    return stateOrGlasses.filter(Boolean).length * WATER_GLASS_ML;
+  }
+  const glassMl = stateOrGlasses.glasses.filter(Boolean).length * WATER_GLASS_ML;
+  const bottleMl = stateOrGlasses.bottles.filter(Boolean).length * WATER_BOTTLE_ML;
+  return glassMl + bottleMl;
+}
+
+export function isWaterGoalMet(stateOrGlasses) {
+  if (Array.isArray(stateOrGlasses)) {
+    return getWaterMl(stateOrGlasses) >= WATER_GOAL_ML;
+  }
+  return getWaterMl(stateOrGlasses) >= WATER_GOAL_ML;
 }
 
 export const EXERCISE_GOAL_SEC = 10 * 60;

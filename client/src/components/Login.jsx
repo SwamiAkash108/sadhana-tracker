@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Link, Navigate, useNavigate } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
+import InstallPrompt from './InstallPrompt';
 
 export default function Login() {
   const { user, login } = useAuth();
@@ -33,8 +34,12 @@ export default function Login() {
         <div className="absolute -top-unit -left-unit w-full h-full bg-primary pointer-events-none z-0 hidden md:block" />
         <div className="bg-surface border-4 border-primary p-margin-desktop shadow-none relative z-10">
           <div className="text-center mb-12">
-            <h1 className="font-headline-md text-headline-md font-bold tracking-tighter text-primary mb-2">SADHANA</h1>
-            <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest">Atma Kriya Path</p>
+            <img
+              src="/icons/narasimha.png"
+              alt="Narasimha"
+              className="h-56 w-auto object-contain mx-auto mb-4"
+            />
+            <h1 className="font-headline-md text-headline-md font-bold tracking-tighter text-primary">SADHANA</h1>
           </div>
           <div className="mb-8">
             <h2 className="font-headline-sm text-headline-sm text-primary mb-2">Welcome Back</h2>
@@ -90,6 +95,7 @@ export default function Login() {
               </Link>
             </p>
           </div>
+          <InstallPrompt variant="banner" />
         </div>
       </main>
     </div>

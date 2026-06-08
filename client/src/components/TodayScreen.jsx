@@ -2,7 +2,7 @@ import { useState, useEffect, useCallback, useRef, forwardRef, useImperativeHand
 import { api } from '../api';
 import {
   getJapaState, setJapaState,
-  getWaterGlasses, toggleWaterGlass, getWaterMl, isWaterGoalMet, WATER_GOAL_ML,
+  getWaterState, toggleWaterGlass, toggleWaterBottle, getWaterMl, isWaterGoalMet, WATER_GOAL_ML,
   getExerciseState, setExerciseState,
   setExercisePushups, isExerciseGoalMet, isPushupGoalMet, EXERCISE_GOAL_SEC, PUSHUP_MAX,
 } from '../utils/sadhanaStorage';
@@ -12,7 +12,6 @@ import { getDayPillars } from '../utils/dayCompletion';
 const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const [checklist, setChecklist] = useState([]);
   const [date, setDate] = useState('');
-  const [streak, setStreak] = useState(0);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
   const [pillarTick, setPillarTick] = useState(0);
@@ -33,13 +32,9 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const fetchToday = useCallback(async () => {
     setLoading(true);
     try {
-      const [todayData, statsData] = await Promise.all([
-        api.getToday(),
-        api.getStats(30),
-      ]);
+      const todayData = await api.getToday();
       setChecklist(todayData.checklist);
       setDate(todayData.date);
-      setStreak(statsData.streak || 0);
       setError('');
     } catch (err) {
       setError(err.message);
@@ -109,12 +104,6 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const dayProgress = getDayPillars({ checklist, date });
   const { pillars, metCount, total: pillarTotal, pct: dayPct, complete: dayComplete } = dayProgress;
 
-  const streakMessage =
-    streak === 0 ? 'Start today — every journey begins with one step.' :
-    streak < 7 ? 'Your momentum is building.' :
-    streak < 30 ? 'Strong commitment. Keep it up!' :
-    'Incredible dedication. You inspire others.';
-
   const dateLabel = today.toLocaleDateString('en-US', { day: 'numeric', month: 'short', year: 'numeric' });
   const timeLabel = now.toLocaleTimeString('en-US', { hour: 'numeric', minute: '2-digit' });
 
@@ -180,26 +169,6 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
           </p>
         </div>
       </header>
-
-      <div className="w-full border-4 border-primary bg-surface-bright flex overflow-hidden woodcut-shadow">
-        <div className="w-24 diagonal-stripes border-r-4 border-primary" />
-        <div className="flex-1 p-6 flex items-center justify-between bg-surface-bright">
-          <div className="flex items-center gap-4">
-            <span
-              className="material-symbols-outlined text-secondary"
-              style={{ fontVariationSettings: "'FILL' 1", fontSize: '32px' }}
-            >
-              local_fire_department
-            </span>
-            <div>
-              <h3 className="font-headline-sm text-headline-sm uppercase">
-                {streak > 0 ? `${streak} Day Streak` : 'Begin Your Streak'}
-              </h3>
-              <p className="font-body-md text-body-md text-on-surface-variant">{streakMessage}</p>
-            </div>
-          </div>
-        </div>
-      </div>
 
       <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
         <JapaMeditation
@@ -523,14 +492,27 @@ function TimeBtn({ label, onClick, accent, className = '' }) {
 }
 
 function WaterTracker({ item, date, onGlassToggle }) {
-  const glasses = getWaterGlasses(date);
-  const ml = getWaterMl(glasses);
-  const goalMet = isWaterGoalMet(glasses);
+  const [water, setWater] = useState(() => getWaterState(date));
+  const ml = getWaterMl(water);
+  const goalMet = isWaterGoalMet(water);
+
+  useEffect(() => {
+    setWater(getWaterState(date));
+  }, [date]);
+
+  const syncGoal = (state) => {
+    setWater(state);
+    onGlassToggle(isWaterGoalMet(state));
+  };
 
   const handleGlassClick = (index) => {
     toggleWaterGlass(date, index);
-    const updated = getWaterGlasses(date);
-    onGlassToggle(isWaterGoalMet(updated));
+    syncGoal(getWaterState(date));
+  };
+
+  const handleBottleClick = (index) => {
+    toggleWaterBottle(date, index);
+    syncGoal(getWaterState(date));
   };
 
   return (
@@ -555,21 +537,30 @@ function WaterTracker({ item, date, onGlassToggle }) {
       </div>
 
       <div className="grid grid-cols-4 gap-3 sm:gap-4">
-        {glasses.map((filled, i) => (
+        {water.glasses.map((filled, i) => (
           <WaterGlass key={i} filled={filled} onClick={() => handleGlassClick(i)} />
+        ))}
+      </div>
+
+      <p className="font-label-sm text-label-sm text-on-surface-variant mt-4 mb-2 text-center uppercase">
+        750 ml bottles
+      </p>
+      <div className="grid grid-cols-3 gap-3 sm:gap-4 max-w-[12rem] sm:max-w-none mx-auto sm:mx-0">
+        {water.bottles.map((filled, i) => (
+          <WaterBottle key={i} filled={filled} onClick={() => handleBottleClick(i)} />
         ))}
       </div>
 
       <p className={`font-label-sm text-label-sm mt-3 text-center ${
         goalMet ? 'text-[#15803d] font-bold' : 'text-on-surface-variant'
       }`}>
-        {goalMet ? '2 litres — goal reached!' : 'Tap a glass to fill · 250 ml each'}
+        {goalMet ? '2 litres — goal reached!' : 'Tap a glass (250 ml) or bottle (750 ml)'}
       </p>
     </div>
   );
 }
 
-function WaterGlass({ index, filled, onClick }) {
+function WaterGlass({ filled, onClick }) {
   return (
     <button
       type="button"
@@ -598,6 +589,36 @@ function WaterGlass({ index, filled, onClick }) {
   );
 }
 
+function WaterBottle({ filled, onClick }) {
+  return (
+    <button
+      type="button"
+      onClick={onClick}
+      className="flex flex-col items-center gap-1.5 p-1 hover:scale-105 transition-transform active:scale-95"
+      aria-label={filled ? '750ml drunk — tap to empty' : 'Empty bottle — tap to fill'}
+    >
+      <svg viewBox="0 0 40 64" className="w-10 h-14" aria-hidden="true">
+        {/* Bottle neck */}
+        <rect x="16" y="4" width="8" height="10" fill="white" stroke="#000" strokeWidth="2" />
+        {/* Bottle cap */}
+        <rect x="14.5" y="2" width="11" height="4" fill="white" stroke="#000" strokeWidth="2" />
+        {/* Bottle body */}
+        <path
+          d="M12 14 H28 C32 14 34 18 34 24 V56 C34 59 31 62 28 62 H12 C9 62 6 59 6 56 V24 C6 18 8 14 12 14 Z"
+          fill="white"
+          stroke="#000"
+          strokeWidth="2"
+          strokeLinejoin="miter"
+        />
+        {filled && (
+          <rect x="9" y="30" width="22" height="29" rx="2" fill="#3b82f6" />
+        )}
+      </svg>
+      <span className="font-label-sm text-label-sm text-on-surface-variant tabular-nums">750ml</span>
+    </button>
+  );
+}
+
 const JAPA_GOAL_MIN = 60;
 const JAPA_GOAL_SEC = JAPA_GOAL_MIN * 60;
 
@@ -612,36 +633,36 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
   const [elapsed, setElapsed] = useState(0);
   const [running, setRunning] = useState(false);
   const [marking, setMarking] = useState(false);
+  const [customMinutes, setCustomMinutes] = useState('');
   const syncedRef = useRef(false);
 
   const goalReached = elapsed >= JAPA_GOAL_SEC;
-  const isComplete = goalReached || item?.completed;
+  const markedComplete = !!item?.completed;
 
   useEffect(() => {
     if (!date) return;
     const state = getJapaState(date);
     setElapsed(state.elapsed);
-    setRunning(state.running && state.elapsed < JAPA_GOAL_SEC);
+    setRunning(!!state.running);
     syncedRef.current = item?.completed ?? false;
   }, [date, item?.completed]);
 
   useImperativeHandle(ref, () => ({
-    start: () => { if (!goalReached && !item?.completed) setRunning(true); },
+    start: () => setRunning(true),
     scrollIntoView: () => containerRef.current?.scrollIntoView({ behavior: 'smooth', block: 'center' }),
   }));
 
   useEffect(() => {
-    if (!running || !date || goalReached) return;
+    if (!running || !date) return;
     const id = setInterval(() => {
       setElapsed(prev => {
-        const next = Math.min(prev + 1, JAPA_GOAL_SEC);
-        setJapaState(date, next, next < JAPA_GOAL_SEC);
-        if (next >= JAPA_GOAL_SEC) setRunning(false);
+        const next = prev + 1;
+        setJapaState(date, next, true);
         return next;
       });
     }, 1000);
     return () => clearInterval(id);
-  }, [running, date, goalReached]);
+  }, [running, date]);
 
   useEffect(() => {
     if (!date || !item || item.completed || syncedRef.current) return;
@@ -654,7 +675,6 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
   }, [elapsed, date, item, onCompleteChange]);
 
   const handleToggleRunning = () => {
-    if (isComplete) return;
     const next = !running;
     setRunning(next);
     if (date) setJapaState(date, elapsed, next);
@@ -677,6 +697,22 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
     }
   };
 
+  const handleAdjust = (deltaSec) => {
+    setRunning(false);
+    setElapsed(prev => {
+      const next = Math.max(0, prev + deltaSec);
+      if (date) setJapaState(date, next, false);
+      return next;
+    });
+  };
+
+  const handleAddCustomMinutes = () => {
+    const mins = Number(customMinutes);
+    if (!Number.isFinite(mins) || mins <= 0) return;
+    handleAdjust(Math.round(mins * 60));
+    setCustomMinutes('');
+  };
+
   const pct = Math.min(100, (elapsed / JAPA_GOAL_SEC) * 100);
   const ringColor = goalReached ? '#15803d' : '#000000';
   const timerLabel = running ? 'Pause' : elapsed > 0 ? 'Resume' : 'Start';
@@ -687,7 +723,7 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
       className={`lg:col-span-8 border-4 p-6 md:p-12 flex flex-col items-center justify-center relative woodcut-shadow transition-colors duration-700 ${
         goalReached
           ? 'border-[#15803d] bg-[#f0fdf4]'
-          : isComplete
+          : markedComplete
             ? 'border-[#15803d] bg-surface'
             : 'border-primary bg-surface'
       }`}
@@ -702,7 +738,7 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
           60 Min Complete
         </div>
       )}
-      {isComplete && !goalReached && (
+      {markedComplete && !goalReached && (
         <div className="absolute top-4 right-4 bg-[#15803d] text-white px-2 py-1 font-label-sm text-label-sm uppercase">
           Complete
         </div>
@@ -732,17 +768,38 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
           </span>
         </div>
       </div>
-      <div className="mt-8 md:mt-12 flex flex-col sm:flex-row items-center gap-4">
-        {!isComplete && (
+      <div className="mt-6 w-full max-w-xs md:max-w-sm">
+        <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-1.5 text-center">Add time</p>
+        <div className="flex gap-2">
+          <input
+            type="number"
+            min="1"
+            inputMode="numeric"
+            placeholder="Minutes"
+            value={customMinutes}
+            onChange={(e) => setCustomMinutes(e.target.value)}
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAddCustomMinutes(); }}
+            className="flex-1 min-w-0 border-2 border-primary bg-surface px-3 py-2 font-label-sm text-label-sm tabular-nums focus:outline-none focus:border-secondary placeholder:text-outline-variant"
+            aria-label="Custom minutes to add"
+          />
           <button
-            onClick={handleToggleRunning}
-            className="bg-primary text-on-primary border-4 border-primary px-8 md:px-12 py-3 md:py-4 font-headline-sm text-headline-sm uppercase tracking-widest hover:bg-secondary hover:border-secondary transition-colors woodcut-shadow-sm group"
+            type="button"
+            onClick={handleAddCustomMinutes}
+            disabled={!customMinutes || Number(customMinutes) <= 0}
+            className="shrink-0 border-2 border-primary bg-primary text-on-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-40"
           >
-            {timerLabel}
-            <span className="material-symbols-outlined ml-2 align-middle group-hover:translate-x-1 transition-transform">arrow_forward</span>
+            Add
           </button>
-        )}
-        {!isComplete && (
+        </div>
+      </div>
+      <div className="mt-8 md:mt-12 flex flex-col sm:flex-row items-center gap-4">
+        <button
+          onClick={handleToggleRunning}
+          className="bg-primary text-on-primary border-2 border-primary px-6 py-2 font-label-sm text-label-sm uppercase tracking-wider hover:bg-secondary hover:border-secondary transition-colors woodcut-shadow-sm"
+        >
+          {timerLabel}
+        </button>
+        {!goalReached && !markedComplete && (
           <button
             onClick={handleMarkComplete}
             disabled={marking}
@@ -754,10 +811,10 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
         {goalReached && (
           <div className="flex items-center gap-2 text-[#15803d] font-headline-sm text-headline-sm uppercase">
             <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
-            60 minutes — Japa done for today
+            {running ? '60 min goal reached — timer running' : '60 min goal reached'}
           </div>
         )}
-        {isComplete && !goalReached && (
+        {markedComplete && !goalReached && (
           <div className="flex items-center gap-2 text-[#15803d] font-headline-sm text-headline-sm uppercase">
             <span className="material-symbols-outlined" style={{ fontVariationSettings: "'FILL' 1" }}>check_circle</span>
             Japa done for today

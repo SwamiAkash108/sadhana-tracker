@@ -1,7 +1,7 @@
 import { getAkySessionLevel } from './akyCompletion';
 import {
   getJapaState,
-  getWaterGlasses,
+  getWaterState,
   isWaterGoalMet,
   getExerciseState,
   isExerciseGoalMet,
@@ -29,7 +29,7 @@ export function getDayPillars({ checklist, date }) {
   const japaState = getJapaState(date);
   const japaMet = japaState.elapsed >= JAPA_GOAL_SEC || !!japaItem?.completed;
 
-  const waterMet = isWaterGoalMet(getWaterGlasses(date)) || !!waterItem?.completed;
+  const waterMet = isWaterGoalMet(getWaterState(date)) || !!waterItem?.completed;
 
   const exerciseState = getExerciseState(date);
   const exerciseMet =

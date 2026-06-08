@@ -3,7 +3,12 @@ import ReactDOM from 'react-dom/client';
 import { BrowserRouter } from 'react-router-dom';
 import App from './App';
 import { AuthProvider } from './context/AuthContext';
+import { registerServiceWorker } from './utils/pushNotifications';
 import './index.css';
+
+if ('serviceWorker' in navigator) {
+  registerServiceWorker().catch(() => {});
+}
 
 ReactDOM.createRoot(document.getElementById('root')).render(
   <React.StrictMode>

@@ -4,7 +4,7 @@ import TodayScreen from './TodayScreen';
 import ProgressScreen from './ProgressScreen';
 import TeamScreen from './TeamScreen';
 import AkyScreen from './AkyScreen';
-import NotificationToggle from './NotificationToggle';
+import InstallPrompt from './InstallPrompt';
 
 const TABS = [
   { key: 'today', label: 'Today', icon: 'event_note' },
@@ -21,16 +21,22 @@ export default function Dashboard() {
   const dateStr = today.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase();
 
   return (
-    <div className="bg-background text-on-background font-body-md min-h-screen flex flex-col pt-20 pb-24 md:pb-0">
-      <header className="bg-background text-primary font-headline-sm flex justify-between items-center w-full px-margin-mobile py-4 fixed top-0 z-50 border-b-4 border-primary">
-        <div className="flex items-center gap-3">
-          <span className="material-symbols-outlined text-3xl">self_improvement</span>
-          <h1 className="font-headline-md text-headline-md font-bold tracking-tighter text-primary">SADHANA</h1>
+    <div className="bg-background text-on-background font-body-md min-h-screen flex flex-col pt-[5.875rem] sm:pt-[8.375rem] md:pt-[9.875rem] lg:pt-[11.375rem] pb-24 md:pb-0">
+      <header className="bg-background text-primary font-headline-sm flex justify-between items-center gap-2 w-full px-margin-mobile py-2 sm:py-3 fixed top-0 z-50 border-b-4 border-primary">
+        <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
+          <img
+            src="/icons/hanuman.png"
+            alt="Hanuman"
+            className="h-[5.25rem] sm:h-[7.5rem] md:h-36 lg:h-[10.5rem] w-auto object-contain shrink-0"
+          />
+          <h1 className="font-headline-md font-bold tracking-tighter text-primary leading-none text-[clamp(1.125rem,4.5vw,2rem)] min-w-0">
+            SADHANA
+          </h1>
         </div>
-        <div className="flex items-center gap-2">
-          <NotificationToggle />
-          <span className="font-label-sm text-label-sm font-bold border-2 border-primary px-3 py-1 bg-surface">{dateStr}</span>
-          <button onClick={logout} className="ml-2 p-2 hover:bg-surface-variant rounded-full transition-colors" title="Sign out">
+        <div className="flex items-center gap-1 sm:gap-2 shrink-0">
+          <InstallPrompt />
+          <span className="hidden sm:inline-block font-label-sm text-label-sm font-bold border-2 border-primary px-2 sm:px-3 py-1 bg-surface">{dateStr}</span>
+          <button onClick={logout} className="p-1.5 sm:p-2 hover:bg-surface-variant rounded-full transition-colors" title="Sign out">
             <span className="material-symbols-outlined">logout</span>
           </button>
         </div>
