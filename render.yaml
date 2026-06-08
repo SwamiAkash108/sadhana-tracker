@@ -21,6 +21,6 @@ services:
       - key: VAPID_PRIVATE_KEY
         value: aaX_jFd6Q-_ag4di3yGKxNs-rfUgElKMkfx6zTJqA-I
       - key: TURSO_DATABASE_URL
-        sync: false
+        value: libsql://sadhana-tracker-swamiakash108.aws-eu-west-1.turso.io
       - key: TURSO_AUTH_TOKEN
         sync: false
