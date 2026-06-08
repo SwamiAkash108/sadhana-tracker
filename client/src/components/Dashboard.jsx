@@ -1,3 +1,9 @@
+import { useState } from 'react';
+import { useAuth } from '../context/AuthContext';
+import TodayScreen from './TodayScreen';
+import ProgressScreen from './ProgressScreen';
+import TeamScreen from './TeamScreen';
+import AkyScreen from './AkyScreen';
 import NotificationToggle from './NotificationToggle';
 
 const TABS = [
@@ -5,15 +11,6 @@ const TABS = [
   { key: 'progress', label: 'Progress', icon: 'insights' },
   { key: 'community', label: 'Community', icon: 'groups' },
 ];
-
-import { useState } from 'react';
-import { useAuth } from '../context/AuthContext';
-import TodayScreen from './TodayScreen';
-import ProgressScreen from './ProgressScreen';
-import TeamScreen from './TeamScreen';
-import AkyScreen from './AkyScreen';
-
-import NotificationToggle from './NotificationToggle';
 
 export default function Dashboard() {
   const { user, logout } = useAuth();
