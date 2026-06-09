@@ -1025,6 +1025,20 @@ router.post('/groups/:id/invite', async (req, res) => {
       [inviteId, groupId, req.userId, inviteeId]
     );
 
+    const group = await getGroupById(db, groupId);
+    const inviterResult = await db.execute('SELECT name FROM users WHERE id = ?', [req.userId]);
+    const inviterName = inviterResult.rows[0]?.name || 'Someone';
+    await sendPushToUser(db, inviteeId, {
+      title: '👥 Sangha invitation',
+      body: `${inviterName} invited you to join "${group?.name || 'a sangha'}"`,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-72.png',
+      data: { url: '/' },
+      vibrate: [200, 100, 200],
+      tag: `sangha-invite-${inviteId}`,
+      requireInteraction: false,
+    });
+
     const groups = await fetchGroupsForUser(db, req.userId);
     res.json({ group: groups.find(g => g.id === groupId), invitation_id: inviteId });
   } catch (err) {

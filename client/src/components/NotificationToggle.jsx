@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { api } from '../api';
-import { getServiceWorkerRegistration, isPushSupported } from '../utils/pushNotifications';
+import { checkServerPushConfigured, disablePushNotifications, enablePushNotifications } from '../utils/enablePush';
+import { isPushSupported, isPushSubscribed } from '../utils/pushNotifications';
 
 export default function NotificationToggle() {
   const [open, setOpen] = useState(false);
@@ -17,34 +18,30 @@ export default function NotificationToggle() {
   useEffect(() => {
     let cancelled = false;
 
-    (async () => {
+    async function refreshState() {
       const canPush = isPushSupported();
       if (!cancelled) setSupported(canPush);
 
-      try {
-        await api.getVapidKey();
-        if (!cancelled) setServerConfigured(true);
-      } catch {
-        if (!cancelled) setServerConfigured(false);
-      }
+      if (!cancelled) setServerConfigured(await checkServerPushConfigured());
 
       if (!canPush) {
         if (!cancelled) setReady(true);
         return;
       }
 
-      try {
-        const reg = await getServiceWorkerRegistration();
-        const sub = await reg.pushManager.getSubscription();
-        if (!cancelled) setEnabled(!!sub);
-      } catch {
-        /* ignore */
-      } finally {
-        if (!cancelled) setReady(true);
-      }
-    })();
+      if (!cancelled) setEnabled(await isPushSubscribed());
+      if (!cancelled) setReady(true);
+    }
 
-    return () => { cancelled = true; };
+    refreshState();
+
+    const onSubscriptionChange = () => { refreshState(); };
+    window.addEventListener('push-subscription-changed', onSubscriptionChange);
+
+    return () => {
+      cancelled = true;
+      window.removeEventListener('push-subscription-changed', onSubscriptionChange);
+    };
   }, []);
 
   useEffect(() => {
@@ -74,23 +71,11 @@ export default function NotificationToggle() {
       return;
     }
 
-    const perm = await Notification.requestPermission();
-    if (perm !== 'granted') {
-      setError('Notification permission denied. Check your browser or phone settings.');
-      return;
-    }
-
     setBusy(true);
     try {
-      const { publicKey } = await api.getVapidKey();
-      const reg = await getServiceWorkerRegistration();
-      const sub = await reg.pushManager.subscribe({
-        userVisibleOnly: true,
-        applicationServerKey: url64(publicKey),
-      });
-      await api.subscribe(sub.toJSON());
+      await enablePushNotifications();
       setEnabled(true);
-      setMessage('Notifications enabled. You\'ll get Sangha nudges on this device.');
+      setMessage('Notifications enabled. You\'ll get Sangha nudges and invitations on this device.');
     } catch (err) {
       setError(err.message || 'Could not enable notifications.');
     } finally {
@@ -103,12 +88,7 @@ export default function NotificationToggle() {
     setMessage('');
     setBusy(true);
     try {
-      const reg = await getServiceWorkerRegistration();
-      const sub = await reg.pushManager.getSubscription();
-      if (sub) {
-        await sub.unsubscribe();
-        await api.unsubscribe();
-      }
+      await disablePushNotifications();
       setEnabled(false);
       setMessage('Notifications turned off.');
     } catch (err) {
@@ -163,7 +143,7 @@ export default function NotificationToggle() {
         <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 z-[60] bg-surface border-4 border-primary woodcut-shadow p-4">
           <p className="font-headline-sm text-headline-sm uppercase text-primary mb-2">Push Notifications</p>
           <p className="font-body-md text-body-md text-on-surface-variant mb-4">
-            Get alerted when a Sangha friend nudges you, even when the app is closed.
+            Get alerted when a Sangha friend nudges you, invites you to a group, or sends a request — even when the app is closed.
           </p>
 
           {!supported && (
@@ -225,11 +205,4 @@ export default function NotificationToggle() {
       )}
     </div>
   );
-}
-
-function url64(s) {
-  const p = '='.repeat((4 - (s.length % 4)) % 4);
-  const b = (s + p).replace(/-/g, '+').replace(/_/g, '/');
-  const r = atob(b);
-  return new Uint8Array([...r].map(c => c.charCodeAt(0)));
 }

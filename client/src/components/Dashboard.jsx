@@ -8,6 +8,12 @@ import AkyScreen from './AkyScreen';
 import FriendRequestsBell from './FriendRequestsBell';
 import NotificationToggle from './NotificationToggle';
 import CommitmentModal from './CommitmentModal';
+import NotificationPromptModal from './NotificationPromptModal';
+import { checkServerPushConfigured } from '../utils/enablePush';
+import {
+  isNotificationPromptDismissed,
+  isPushSubscribed,
+} from '../utils/pushNotifications';
 
 const TABS = [
   { key: 'today', label: 'Today', icon: 'event_note' },
@@ -23,6 +29,14 @@ export default function Dashboard() {
   const [focusPendingRequests, setFocusPendingRequests] = useState(false);
   const [acceptingCommitment, setAcceptingCommitment] = useState(false);
   const [commitmentError, setCommitmentError] = useState('');
+  const [showNotificationPrompt, setShowNotificationPrompt] = useState(false);
+
+  const maybeShowNotificationPrompt = useCallback(async () => {
+    if (isNotificationPromptDismissed()) return;
+    if (await isPushSubscribed()) return;
+    if (!await checkServerPushConfigured()) return;
+    setShowNotificationPrompt(true);
+  }, []);
 
   const refreshFriendRequests = useCallback(async () => {
     try {
@@ -54,6 +68,11 @@ export default function Dashboard() {
     };
   }, [refreshFriendRequests]);
 
+  useEffect(() => {
+    if (!user?.commitmentAccepted) return;
+    maybeShowNotificationPrompt();
+  }, [user?.commitmentAccepted, maybeShowNotificationPrompt]);
+
   const openFriendRequests = () => {
     setShowAky(false);
     setTab('community');
@@ -65,6 +84,7 @@ export default function Dashboard() {
     setAcceptingCommitment(true);
     try {
       await acceptCommitment();
+      await maybeShowNotificationPrompt();
     } catch (err) {
       setCommitmentError(err.message || 'Could not save your commitment. Please try again.');
     } finally {
@@ -171,6 +191,9 @@ export default function Dashboard() {
           onAccept={handleAcceptCommitment}
           accepting={acceptingCommitment}
         />
+      )}
+      {showNotificationPrompt && user?.commitmentAccepted && (
+        <NotificationPromptModal onDone={() => setShowNotificationPrompt(false)} />
       )}
       {commitmentError && !user?.commitmentAccepted && (
         <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[111] max-w-sm w-[calc(100%-2rem)] bg-error-container text-on-error-container border-2 border-error px-4 py-3 font-label-sm text-label-sm text-center">
