@@ -38,6 +38,7 @@ export const api = {
   getToday: () => request('/sadhana/today'),
   setCustomLabel: (itemId, label) => request('/sadhana/custom-label', { method: 'PUT', body: JSON.stringify({ item_id: itemId, label }) }),
   toggleItem: (itemId) => request('/sadhana/toggle', { method: 'POST', body: JSON.stringify({ item_id: itemId }) }),
+  completeItem: (itemId) => request('/sadhana/complete', { method: 'POST', body: JSON.stringify({ item_id: itemId }) }),
   getStats: (days = 30) => request(`/sadhana/stats?days=${days}`),
   getMonthStats: (year, month) => request(`/sadhana/stats/month?year=${year}&month=${month}`),
   getProgressRange: (from, to) => {

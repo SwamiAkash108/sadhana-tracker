@@ -26,6 +26,8 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const [customLabelError, setCustomLabelError] = useState('');
   const [savingCustomLabel, setSavingCustomLabel] = useState(false);
   const japaRef = useRef(null);
+  const checklistRef = useRef(checklist);
+  checklistRef.current = checklist;
   const bumpPillars = () => setPillarTick(t => t + 1);
 
   useEffect(() => {
@@ -60,6 +62,20 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
     const completedIds = checklist.filter(i => i.completed).map(i => i.id);
     scheduleDaySnapshot(checklist, date, completedIds);
   }, [checklist, date, pillarTick]);
+
+  useEffect(() => {
+    if (!date) return;
+
+    const resync = async () => {
+      if (document.visibilityState !== 'visible') return;
+      const synced = await syncLocalPillarsToServer(checklistRef.current, date);
+      setChecklist(synced);
+      bumpPillars();
+    };
+
+    document.addEventListener('visibilitychange', resync);
+    return () => document.removeEventListener('visibilitychange', resync);
+  }, [date]);
 
   const handleToggle = async (itemId) => {
     setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i));
@@ -270,7 +286,11 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
                     i.id === waterItem.id ? { ...i, completed: shouldComplete } : i
                   ));
                   try {
-                    await api.toggleItem(waterItem.id);
+                    if (shouldComplete) {
+                      await api.completeItem(waterItem.id);
+                    } else {
+                      await api.toggleItem(waterItem.id);
+                    }
                   } catch {
                     setChecklist(prev => prev.map(i =>
                       i.id === waterItem.id ? { ...i, completed: !shouldComplete } : i
@@ -288,21 +308,41 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
               completed={exerciseItem.completed}
               onGoalChange={async (goalMet) => {
                 bumpPillars();
+                if (!goalMet) {
+                  setChecklist(prev => {
+                    const current = prev.find(i => i.id === exerciseItem.id);
+                    if (!current?.completed) return prev;
+                    (async () => {
+                      try {
+                        await api.toggleItem(exerciseItem.id);
+                      } catch {
+                        setChecklist(p => p.map(i =>
+                          i.id === exerciseItem.id ? { ...i, completed: true } : i
+                        ));
+                        bumpPillars();
+                      }
+                    })();
+                    return prev.map(i =>
+                      i.id === exerciseItem.id ? { ...i, completed: false } : i
+                    );
+                  });
+                  return;
+                }
                 setChecklist(prev => {
                   const current = prev.find(i => i.id === exerciseItem.id);
-                  if (!current || current.completed === goalMet) return prev;
+                  if (current?.completed) return prev;
                   (async () => {
                     try {
-                      await api.toggleItem(exerciseItem.id);
+                      await api.completeItem(exerciseItem.id);
                     } catch {
                       setChecklist(p => p.map(i =>
-                        i.id === exerciseItem.id ? { ...i, completed: !goalMet } : i
+                        i.id === exerciseItem.id ? { ...i, completed: false } : i
                       ));
                       bumpPillars();
                     }
                   })();
                   return prev.map(i =>
-                    i.id === exerciseItem.id ? { ...i, completed: goalMet } : i
+                    i.id === exerciseItem.id ? { ...i, completed: true } : i
                   );
                 });
               }}
@@ -500,6 +540,8 @@ function ExerciseTracker({ date, completed, onGoalChange }) {
   const [running, setRunning] = useState(false);
   const [pushups, setPushups] = useState(0);
   const syncedRef = useRef(false);
+  const onGoalChangeRef = useRef(onGoalChange);
+  onGoalChangeRef.current = onGoalChange;
 
   const goalReached = elapsed >= EXERCISE_GOAL_SEC;
   const pushupsDone = isPushupGoalMet(pushups);
@@ -520,9 +562,13 @@ function ExerciseTracker({ date, completed, onGoalChange }) {
     if (!date) return;
     const state = getExerciseState(date);
     setElapsed(state.elapsed);
-    setRunning(state.running);
+    setRunning(state.running && state.elapsed < EXERCISE_GOAL_SEC);
     setPushups(state.pushups);
-    syncedRef.current = completed;
+    const localMet = isExerciseGoalMet(state.elapsed) || isPushupGoalMet(state.pushups);
+    syncedRef.current = completed && localMet;
+    if (localMet && !completed) {
+      onGoalChangeRef.current(true);
+    }
   }, [date, completed]);
 
   useEffect(() => {
@@ -881,7 +927,7 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
     if (!date || !item || item.completed || syncedRef.current) return;
     if (elapsed >= JAPA_GOAL_SEC) {
       syncedRef.current = true;
-      api.toggleItem(item.id)
+      api.completeItem(item.id)
         .then(() => onCompleteChange?.(true))
         .catch(() => { syncedRef.current = false; });
     }
@@ -901,7 +947,7 @@ const JapaMeditation = forwardRef(function JapaMeditation({ item, date, onComple
     if (date) setJapaState(date, JAPA_GOAL_SEC, false);
     syncedRef.current = true;
     try {
-      await api.toggleItem(item.id);
+      await api.completeItem(item.id);
       onCompleteChange?.(true);
     } catch {
       syncedRef.current = false;

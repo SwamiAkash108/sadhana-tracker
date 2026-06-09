@@ -9,19 +9,19 @@ import {
 } from './sadhanaStorage';
 import { JAPA_GOAL_SEC } from './dayCompletion';
 
-/** Push local timer/counter progress to the server when goals are met but toggles aren't saved yet. */
+/** Push local timer/counter progress to the server when goals are met. */
 export async function syncLocalPillarsToServer(checklist, date) {
   if (!date || !checklist.length) return checklist;
 
   let next = checklist;
 
-  const markComplete = async (item) => {
-    if (!item || item.completed) return;
+  const ensureComplete = async (item, localMet) => {
+    if (!item || !localMet) return;
     try {
-      await api.toggleItem(item.id);
+      await api.completeItem(item.id);
       next = next.map(i => (i.id === item.id ? { ...i, completed: true } : i));
     } catch {
-      /* keep local UI; will retry on next load */
+      /* retry on next load or visibility */
     }
   };
 
@@ -32,17 +32,17 @@ export async function syncLocalPillarsToServer(checklist, date) {
 
   const japaState = getJapaState(date);
   if (japaState.elapsed >= JAPA_GOAL_SEC) {
-    await markComplete(japaItem);
+    await ensureComplete(japaItem, true);
   }
 
   if (isWaterGoalMet(getWaterState(date))) {
-    await markComplete(waterItem);
+    await ensureComplete(waterItem, true);
   }
 
   const exerciseState = getExerciseState(date);
-  if (isExerciseGoalMet(exerciseState.elapsed) || isPushupGoalMet(exerciseState.pushups)) {
-    await markComplete(exerciseItem);
-  }
+  const exerciseMet =
+    isExerciseGoalMet(exerciseState.elapsed) || isPushupGoalMet(exerciseState.pushups);
+  await ensureComplete(exerciseItem, exerciseMet);
 
   return next;
 }

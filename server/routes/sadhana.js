@@ -260,6 +260,34 @@ router.post('/toggle', async (req, res) => {
   }
 });
 
+// POST /api/sadhana/complete { item_id } — idempotent mark-done (no accidental un-complete)
+router.post('/complete', async (req, res) => {
+  try {
+    const { item_id } = req.body;
+    if (!item_id) return res.status(400).json({ error: 'item_id is required.' });
+
+    const db = getDb();
+    const today = getSadhanaDate();
+
+    const existing = await db.execute(
+      'SELECT id FROM daily_progress WHERE user_id = ? AND item_id = ? AND date = ?',
+      [req.userId, item_id, today]
+    );
+
+    if (existing.rows.length === 0) {
+      await db.execute(
+        'INSERT INTO daily_progress (id, user_id, item_id, date) VALUES (?, ?, ?, ?)',
+        [uuidv4(), req.userId, item_id, today]
+      );
+    }
+
+    res.json({ completed: true });
+  } catch (err) {
+    console.error('Complete error:', err);
+    res.status(500).json({ error: 'Failed to mark item complete.' });
+  }
+});
+
 function computeStreakFromMap(sortedDates, progressMap, totalItems) {
   let streak = 0;
   const today = sortedDates[sortedDates.length - 1];
