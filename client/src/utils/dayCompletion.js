@@ -64,6 +64,37 @@ export function isDayComplete(params) {
   return getDayPillars(params).complete;
 }
 
+/** Day tier for streak + calendar: none | orange (partial kriya) | green (full kriya). */
+export function getDayStatus({ items, date, completedIds = [] }) {
+  const idSet = completedIds instanceof Set ? completedIds : new Set(completedIds);
+  const checklist = items.map(item => ({
+    ...item,
+    completed: idSet.has(item.id),
+  }));
+
+  const akyItems = checklist.filter(i => {
+    const c = (i.category || '').toLowerCase();
+    return c !== 'quick' && c !== 'japa';
+  });
+  const akyLevel = getAkySessionLevel(akyItems, date);
+  const { pillars, metCount, total, complete } = getDayPillars({ checklist, date });
+
+  let status = 'none';
+  if (complete) {
+    status = akyLevel === 'green' ? 'green' : 'orange';
+  }
+
+  return {
+    status,
+    akyLevel,
+    pillars,
+    metCount,
+    total,
+    complete,
+    countsAsStreak: complete,
+  };
+}
+
 /** Friend progress from server-synced toggles only (no local timers). */
 export function getDayPillarsFromServer(checklist) {
   const akyItems = checklist.filter(i => {

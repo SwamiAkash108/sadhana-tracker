@@ -1,5 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
+import { scheduleDaySnapshot } from '../utils/daySnapshot';
+import SessionErrorPanel from './SessionErrorPanel';
 import {
   getCounter, setCounter, getDoneSessions, markDoneSession,
   getMaxDoneSessions, getCounterMax, getCounterDisplay, getCounterMaxDisplay,
@@ -60,6 +62,19 @@ export default function AkyScreen({ onClose }) {
 
   useEffect(() => { fetchToday(); }, [fetchToday]);
 
+  const persistSnapshot = useCallback(async () => {
+    try {
+      const data = await api.getToday();
+      scheduleDaySnapshot(
+        data.checklist,
+        data.date,
+        data.checklist.filter(i => i.completed).map(i => i.id),
+      );
+    } catch {
+      // ignore
+    }
+  }, []);
+
   const bump = () => setTick(t => t + 1);
 
   const syncItemCompletion = async (item, doneSessions) => {
@@ -86,6 +101,7 @@ export default function AkyScreen({ onClose }) {
   const handleCounterChange = (item, delta) => {
     setCounter(date, item.id, getCounter(date, item.id) + delta, item);
     bump();
+    persistSnapshot();
   };
 
   const handleDoneSession = async (item) => {
@@ -96,6 +112,7 @@ export default function AkyScreen({ onClose }) {
     const next = markDoneSession(date, item.id, max);
     const completed = await syncItemCompletion(item, next);
     updateItem(item.id, i => ({ ...i, completed }));
+    persistSnapshot();
   };
 
   if (loading) {
@@ -108,9 +125,16 @@ export default function AkyScreen({ onClose }) {
 
   if (error) {
     return (
-      <div className="bg-surface border-4 border-primary woodcut-shadow p-8 text-center">
-        <p className="font-body-md text-body-md text-secondary mb-4">{error}</p>
-        <button onClick={fetchToday} className="btn-woodcut px-6 py-3">Retry</button>
+      <div className="flex flex-col gap-6 py-4">
+        <button
+          type="button"
+          onClick={onClose}
+          className="flex items-center gap-2 font-label-sm text-label-sm uppercase text-primary hover:text-secondary transition-colors w-fit"
+        >
+          <span className="material-symbols-outlined">arrow_back</span>
+          Back to Today
+        </button>
+        <SessionErrorPanel error={error} onRetry={fetchToday} />
       </div>
     );
   }

@@ -17,6 +17,21 @@ if (VAPID_PUBLIC && VAPID_PRIVATE) {
 
 const DAY_PILLAR_COUNT = 6;
 
+function computeAkyLevelFromServer(items, completedIds) {
+  const isDone = (name) => items.some(
+    i => (i.name || '').toLowerCase() === name.toLowerCase() && completedIds.has(i.id)
+  );
+  const isGreen =
+    isDone('Main Kriya') &&
+    isDone('Kriya Level 2') &&
+    isDone('Trinity Meditation') &&
+    isDone('Suka Purvaka') &&
+    isDone('Nadhi Shuddhi');
+  if (isGreen) return 'green';
+  if (isDone('Main Kriya') && isDone('Kriya Level 2')) return 'orange';
+  return 'none';
+}
+
 function computeDayPillarsFromServer(items, completedIds) {
   const isDone = (name) => items.some(
     i => (i.name || '').toLowerCase() === name.toLowerCase() && completedIds.has(i.id)
@@ -58,11 +73,13 @@ async function sendPushToUser(db, userId, payload) {
   return sent;
 }
 
-function buildMemberProgress(user, items, totalItems, completedIds) {
+function buildMemberProgress(user, items, totalItems, completedIds, customLabelsForUser = {}) {
   const completed = completedIds.size;
   const itemStatus = items.map(item => ({
     id: item.id,
-    name: item.name,
+    name: (item.category || '').toLowerCase() === 'custom'
+      ? (customLabelsForUser[item.id] || 'Custom')
+      : item.name,
     category: item.category,
     completed: completedIds.has(item.id),
   }));
@@ -72,6 +89,7 @@ function buildMemberProgress(user, items, totalItems, completedIds) {
   const quickItems = items.filter(i => (i.category || '').toLowerCase() === 'quick');
   const quickDone = quickItems.filter(i => completedIds.has(i.id)).length;
   const dayPillars = computeDayPillarsFromServer(items, completedIds);
+  const akyLevel = computeAkyLevelFromServer(items, completedIds);
 
   return {
     ...user,
@@ -81,6 +99,7 @@ function buildMemberProgress(user, items, totalItems, completedIds) {
     items: itemStatus,
     akyDone,
     akyTotal: akyItems.length,
+    akyLevel,
     japaDone,
     quickDone,
     quickTotal: quickItems.length,
@@ -136,6 +155,30 @@ router.get('/items', async (req, res) => {
   }
 });
 
+async function getCustomLabelsForUser(db, userId) {
+  const result = await db.execute(
+    'SELECT item_id, label FROM user_custom_labels WHERE user_id = ?',
+    [userId]
+  );
+  return Object.fromEntries(result.rows.map(row => [row.item_id, row.label]));
+}
+
+async function getCustomLabelsForUsers(db, userIds) {
+  if (userIds.length === 0) return {};
+  const placeholders = userIds.map(() => '?').join(', ');
+  const result = await db.execute(
+    `SELECT user_id, item_id, label FROM user_custom_labels WHERE user_id IN (${placeholders})`,
+    userIds
+  );
+  const map = {};
+  for (const row of result.rows) {
+    if (!map[row.user_id]) map[row.user_id] = {};
+    map[row.user_id][row.item_id] = row.label;
+  }
+  return map;
+}
+
+
 // GET /api/sadhana/today
 router.get('/today', async (req, res) => {
   try {
@@ -147,16 +190,49 @@ router.get('/today', async (req, res) => {
 
     const progressResult = await db.execute('SELECT item_id FROM daily_progress WHERE user_id = ? AND date = ?', [req.userId, today]);
     const completedIds = new Set(progressResult.rows.map(p => p.item_id));
+    const customLabels = await getCustomLabelsForUser(db, req.userId);
 
     const checklist = items.map(item => ({
       ...item,
-      completed: completedIds.has(item.id)
+      name: (item.category || '').toLowerCase() === 'custom'
+        ? (customLabels[item.id] || 'Custom')
+        : item.name,
+      completed: completedIds.has(item.id),
     }));
 
     res.json({ date: today, checklist, summary: { total: items.length, done: completedIds.size, remaining: items.length - completedIds.size } });
   } catch (err) {
     console.error('Today error:', err);
     res.status(500).json({ error: 'Failed to fetch today data.' });
+  }
+});
+
+// PUT /api/sadhana/custom-label { item_id, label }
+router.put('/custom-label', async (req, res) => {
+  try {
+    const db = getDb();
+    const { item_id: itemId, label } = req.body;
+    const trimmed = (label || '').trim();
+    if (!itemId) return res.status(400).json({ error: 'item_id is required.' });
+    if (!trimmed) return res.status(400).json({ error: 'Label is required.' });
+    if (trimmed.length > 24) return res.status(400).json({ error: 'Label is too long (24 max).' });
+
+    const itemResult = await db.execute(
+      "SELECT id FROM sadhana_items WHERE id = ? AND lower(category) = 'custom' AND active = 1",
+      [itemId]
+    );
+    if (!itemResult.rows[0]) return res.status(404).json({ error: 'Custom practice not found.' });
+
+    await db.execute(
+      `INSERT INTO user_custom_labels (user_id, item_id, label) VALUES (?, ?, ?)
+       ON CONFLICT(user_id, item_id) DO UPDATE SET label = excluded.label`,
+      [req.userId, itemId, trimmed]
+    );
+
+    res.json({ item_id: itemId, label: trimmed });
+  } catch (err) {
+    console.error('Custom label error:', err);
+    res.status(500).json({ error: 'Failed to save label.' });
   }
 });
 
@@ -352,6 +428,100 @@ router.get('/stats/month', async (req, res) => {
   } catch (err) {
     console.error('Month stats error:', err);
     res.status(500).json({ error: 'Failed to fetch month stats.' });
+  }
+});
+
+// GET /api/sadhana/progress/range?from=&to=
+router.get('/progress/range', async (req, res) => {
+  try {
+    const db = getDb();
+    const { from, to } = req.query;
+
+    let sql = 'SELECT date, item_id FROM daily_progress WHERE user_id = ?';
+    const params = [req.userId];
+    if (from) {
+      sql += ' AND date >= ?';
+      params.push(from);
+    }
+    if (to) {
+      sql += ' AND date <= ?';
+      params.push(to);
+    }
+    sql += ' ORDER BY date ASC';
+
+    const result = await db.execute(sql, params);
+    const progress = {};
+    for (const row of result.rows) {
+      if (!progress[row.date]) progress[row.date] = [];
+      progress[row.date].push(row.item_id);
+    }
+
+    res.json({ progress });
+  } catch (err) {
+    console.error('Progress range error:', err);
+    res.status(500).json({ error: 'Failed to fetch progress history.' });
+  }
+});
+
+// GET /api/sadhana/snapshots
+router.get('/snapshots', async (req, res) => {
+  try {
+    const db = getDb();
+    const { from, to } = req.query;
+
+    let sql = 'SELECT date, snapshot, updated_at FROM day_snapshots WHERE user_id = ?';
+    const params = [req.userId];
+    if (from) {
+      sql += ' AND date >= ?';
+      params.push(from);
+    }
+    if (to) {
+      sql += ' AND date <= ?';
+      params.push(to);
+    }
+    sql += ' ORDER BY date DESC';
+
+    const result = await db.execute(sql, params);
+    const snapshots = {};
+    for (const row of result.rows) {
+      try {
+        snapshots[row.date] = JSON.parse(row.snapshot);
+      } catch {
+        // skip malformed rows
+      }
+    }
+
+    res.json({ snapshots });
+  } catch (err) {
+    console.error('Snapshots fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch practice history.' });
+  }
+});
+
+// PUT /api/sadhana/snapshots/:date
+router.put('/snapshots/:date', async (req, res) => {
+  try {
+    const db = getDb();
+    const { date } = req.params;
+    const snapshot = req.body;
+
+    if (!date || !snapshot || typeof snapshot !== 'object') {
+      return res.status(400).json({ error: 'Valid date and snapshot body required.' });
+    }
+
+    await db.execute(
+      `INSERT INTO day_snapshots (user_id, date, snapshot, updated_at)
+       VALUES (?, ?, ?, datetime('now'))
+       ON CONFLICT(user_id, date) DO UPDATE SET
+         snapshot = excluded.snapshot,
+         updated_at = excluded.updated_at`,
+      [req.userId, date, JSON.stringify(snapshot)]
+    );
+
+    res.json({ saved: true, date });
+  } catch (err) {
+    console.error('Snapshot save error:', err);
+    res.status(500).json({ error: 'Failed to save practice history.' });
   }
 });
 
@@ -585,11 +755,185 @@ router.post('/friends/remove', async (req, res) => {
     }
 
     await db.execute('DELETE FROM friend_requests WHERE id = ?', [result.rows[0].id]);
+    await db.execute(
+      `DELETE FROM sangha_group_members
+       WHERE user_id = ? AND group_id IN (SELECT id FROM sangha_groups WHERE user_id = ?)`,
+      [friendId, req.userId]
+    );
 
     res.json({ status: 'removed' });
   } catch (err) {
     console.error('Friend remove error:', err);
     res.status(500).json({ error: 'Failed to remove friend.' });
+  }
+});
+
+async function getOwnedGroup(db, groupId, userId) {
+  const result = await db.execute(
+    'SELECT id, name, sort_order FROM sangha_groups WHERE id = ? AND user_id = ?',
+    [groupId, userId]
+  );
+  return result.rows[0] || null;
+}
+
+async function assertGroupMemberAllowed(db, ownerId, memberId) {
+  if (memberId === ownerId) return;
+  const friendIds = await getFriendIds(db, ownerId);
+  if (!friendIds.includes(memberId)) {
+    const err = new Error('Can only add Sangha members to a group.');
+    err.status = 400;
+    throw err;
+  }
+}
+
+async function fetchGroupsForUser(db, userId) {
+  const groupsResult = await db.execute(
+    'SELECT id, name, sort_order FROM sangha_groups WHERE user_id = ? ORDER BY sort_order ASC, name ASC',
+    [userId]
+  );
+  const groups = groupsResult.rows;
+  if (groups.length === 0) return [];
+
+  const groupIds = groups.map(g => g.id);
+  const placeholders = groupIds.map(() => '?').join(', ');
+  const membersResult = await db.execute(
+    `SELECT group_id, user_id FROM sangha_group_members WHERE group_id IN (${placeholders})`,
+    groupIds
+  );
+
+  const membersByGroup = Object.fromEntries(groupIds.map(id => [id, []]));
+  for (const row of membersResult.rows) {
+    membersByGroup[row.group_id].push(row.user_id);
+  }
+
+  return groups.map(g => ({
+    id: g.id,
+    name: g.name,
+    sort_order: g.sort_order,
+    member_ids: membersByGroup[g.id] || [],
+  }));
+}
+
+// GET /api/sadhana/groups
+router.get('/groups', async (req, res) => {
+  try {
+    const db = getDb();
+    const groups = await fetchGroupsForUser(db, req.userId);
+    res.json({ groups });
+  } catch (err) {
+    console.error('Groups list error:', err);
+    res.status(500).json({ error: 'Failed to fetch groups.' });
+  }
+});
+
+// POST /api/sadhana/groups { name }
+router.post('/groups', async (req, res) => {
+  try {
+    const db = getDb();
+    const name = (req.body.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'Group name is required.' });
+    if (name.length > 40) return res.status(400).json({ error: 'Group name is too long.' });
+
+    const countResult = await db.execute(
+      'SELECT COUNT(*) as cnt FROM sangha_groups WHERE user_id = ?',
+      [req.userId]
+    );
+    const sortOrder = Number(countResult.rows[0]?.cnt || 0);
+    const id = uuidv4();
+
+    await db.execute(
+      'INSERT INTO sangha_groups (id, user_id, name, sort_order) VALUES (?, ?, ?, ?)',
+      [id, req.userId, name, sortOrder]
+    );
+
+    res.json({ group: { id, name, sort_order: sortOrder, member_ids: [] } });
+  } catch (err) {
+    console.error('Group create error:', err);
+    res.status(500).json({ error: 'Failed to create group.' });
+  }
+});
+
+// PATCH /api/sadhana/groups/:id { name }
+router.patch('/groups/:id', async (req, res) => {
+  try {
+    const db = getDb();
+    const group = await getOwnedGroup(db, req.params.id, req.userId);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+    const name = (req.body.name || '').trim();
+    if (!name) return res.status(400).json({ error: 'Group name is required.' });
+    if (name.length > 40) return res.status(400).json({ error: 'Group name is too long.' });
+
+    await db.execute('UPDATE sangha_groups SET name = ? WHERE id = ?', [name, group.id]);
+    const groups = await fetchGroupsForUser(db, req.userId);
+    res.json({ group: groups.find(g => g.id === group.id) });
+  } catch (err) {
+    console.error('Group update error:', err);
+    res.status(500).json({ error: 'Failed to update group.' });
+  }
+});
+
+// DELETE /api/sadhana/groups/:id
+router.delete('/groups/:id', async (req, res) => {
+  try {
+    const db = getDb();
+    const group = await getOwnedGroup(db, req.params.id, req.userId);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+    await db.execute('DELETE FROM sangha_group_members WHERE group_id = ?', [group.id]);
+    await db.execute('DELETE FROM sangha_groups WHERE id = ?', [group.id]);
+    res.json({ status: 'deleted' });
+  } catch (err) {
+    console.error('Group delete error:', err);
+    res.status(500).json({ error: 'Failed to delete group.' });
+  }
+});
+
+// POST /api/sadhana/groups/:id/members { user_id }
+router.post('/groups/:id/members', async (req, res) => {
+  try {
+    const db = getDb();
+    const group = await getOwnedGroup(db, req.params.id, req.userId);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+    const memberId = req.body.user_id;
+    if (!memberId) return res.status(400).json({ error: 'user_id is required.' });
+
+    await assertGroupMemberAllowed(db, req.userId, memberId);
+
+    const userResult = await db.execute('SELECT id FROM users WHERE id = ?', [memberId]);
+    if (!userResult.rows[0]) return res.status(404).json({ error: 'User not found.' });
+
+    await db.execute(
+      'INSERT OR IGNORE INTO sangha_group_members (group_id, user_id) VALUES (?, ?)',
+      [group.id, memberId]
+    );
+
+    const groups = await fetchGroupsForUser(db, req.userId);
+    res.json({ group: groups.find(g => g.id === group.id) });
+  } catch (err) {
+    console.error('Group add member error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Failed to add member.' });
+  }
+});
+
+// DELETE /api/sadhana/groups/:id/members/:userId
+router.delete('/groups/:id/members/:userId', async (req, res) => {
+  try {
+    const db = getDb();
+    const group = await getOwnedGroup(db, req.params.id, req.userId);
+    if (!group) return res.status(404).json({ error: 'Group not found.' });
+
+    await db.execute(
+      'DELETE FROM sangha_group_members WHERE group_id = ? AND user_id = ?',
+      [group.id, req.params.userId]
+    );
+
+    const groups = await fetchGroupsForUser(db, req.userId);
+    res.json({ group: groups.find(g => g.id === group.id) });
+  } catch (err) {
+    console.error('Group remove member error:', err);
+    res.status(500).json({ error: 'Failed to remove member.' });
   }
 });
 
@@ -624,9 +968,11 @@ router.get('/team', async (req, res) => {
       progressByUser[row.user_id].add(row.item_id);
     }
 
+    const customLabelsByUser = await getCustomLabelsForUsers(db, memberIds);
+
     const teamData = users.map(user => {
       const completedIds = progressByUser[user.id] || new Set();
-      return buildMemberProgress(user, items, totalItems, completedIds);
+      return buildMemberProgress(user, items, totalItems, completedIds, customLabelsByUser[user.id] || {});
     });
 
     res.json({ date: today, totalItems, members: teamData });
@@ -684,6 +1030,26 @@ router.get('/history/:userId', async (req, res) => {
   } catch (err) {
     console.error('History error:', err);
     res.status(500).json({ error: 'Failed to fetch history.' });
+  }
+});
+
+// GET /api/sadhana/nudges/received — nudges you received today
+router.get('/nudges/received', async (req, res) => {
+  try {
+    const db = getDb();
+    const today = getSadhanaDate();
+    const result = await db.execute(
+      `SELECT sn.id, sn.created_at, u.id as user_id, u.name
+       FROM sangha_nudges sn
+       JOIN users u ON u.id = sn.from_user_id
+       WHERE sn.to_user_id = ? AND sn.date = ?
+       ORDER BY sn.created_at DESC`,
+      [req.userId, today]
+    );
+    res.json({ date: today, nudges: result.rows });
+  } catch (err) {
+    console.error('Received nudges error:', err);
+    res.status(500).json({ error: 'Failed to fetch received nudges.' });
   }
 });
 

@@ -240,6 +240,42 @@ export function isPushupGoalMet(count) {
   return normalizePushupCount(count) >= 1;
 }
 
+/** Collect sadhana dates referenced in local timer/counter storage. */
+function isValidDateStr(s) {
+  return /^\d{4}-\d{2}-\d{2}$/.test(s || '');
+}
+
+export function getAllActivityDates() {
+  const dates = new Set();
+
+  const counterStore = readStore(COUNTER_KEY);
+  for (const key of Object.keys(counterStore)) {
+    const [date] = key.split(':');
+    if (isValidDateStr(date)) dates.add(date);
+  }
+
+  const doneStore = readStore(DONE_SESSIONS_KEY);
+  for (const key of Object.keys(doneStore)) {
+    const [date] = key.split(':');
+    if (isValidDateStr(date)) dates.add(date);
+  }
+
+  const japaStore = readStore(JAPA_KEY);
+  if (isValidDateStr(japaStore.date)) dates.add(japaStore.date);
+
+  const waterStore = readStore(WATER_KEY);
+  for (const date of Object.keys(waterStore)) {
+    if (isValidDateStr(date)) dates.add(date);
+  }
+
+  const exerciseStore = readStore(EXERCISE_KEY);
+  for (const date of Object.keys(exerciseStore)) {
+    if (isValidDateStr(date)) dates.add(date);
+  }
+
+  return [...dates];
+}
+
 export function itemShouldBeComplete(item, doneSessions) {
   const max = getMaxDoneSessions(item);
   return doneSessions >= max;

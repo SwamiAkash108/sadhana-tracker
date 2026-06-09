@@ -8,7 +8,10 @@ import {
 } from '../utils/sadhanaStorage';
 import { getAkySessionLevel, getAkySessionMeta } from '../utils/akyCompletion';
 import { getDayPillars } from '../utils/dayCompletion';
+import { scheduleDaySnapshot } from '../utils/daySnapshot';
 import SanghaNudgePanel from './SanghaNudgePanel';
+import ReceivedNudgesBanner from './ReceivedNudgesBanner';
+import SessionErrorPanel from './SessionErrorPanel';
 
 const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const [checklist, setChecklist] = useState([]);
@@ -17,6 +20,10 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const [error, setError] = useState('');
   const [pillarTick, setPillarTick] = useState(0);
   const [now, setNow] = useState(() => new Date());
+  const [editingCustom, setEditingCustom] = useState(null);
+  const [customLabelDraft, setCustomLabelDraft] = useState('');
+  const [customLabelError, setCustomLabelError] = useState('');
+  const [savingCustomLabel, setSavingCustomLabel] = useState(false);
   const japaRef = useRef(null);
   const bumpPillars = () => setPillarTick(t => t + 1);
 
@@ -46,6 +53,12 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
 
   useEffect(() => { fetchToday(); }, [fetchToday]);
 
+  useEffect(() => {
+    if (!date || checklist.length === 0) return;
+    const completedIds = checklist.filter(i => i.completed).map(i => i.id);
+    scheduleDaySnapshot(checklist, date, completedIds);
+  }, [checklist, date, pillarTick]);
+
   const handleToggle = async (itemId) => {
     setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i));
     bumpPillars();
@@ -54,6 +67,31 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
     } catch {
       setChecklist(prev => prev.map(i => i.id === itemId ? { ...i, completed: !i.completed } : i));
       bumpPillars();
+    }
+  };
+
+  const openCustomEdit = (item) => {
+    setEditingCustom(item);
+    setCustomLabelDraft(item.name === 'Custom' ? '' : item.name);
+    setCustomLabelError('');
+  };
+
+  const saveCustomLabel = async (e) => {
+    e?.preventDefault();
+    if (!editingCustom) return;
+    const label = customLabelDraft.trim() || 'Custom';
+    setSavingCustomLabel(true);
+    setCustomLabelError('');
+    try {
+      await api.setCustomLabel(editingCustom.id, label);
+      setChecklist(prev => prev.map(i =>
+        i.id === editingCustom.id ? { ...i, name: label } : i
+      ));
+      setEditingCustom(null);
+    } catch (err) {
+      setCustomLabelError(err.message);
+    } finally {
+      setSavingCustomLabel(false);
     }
   };
 
@@ -74,12 +112,7 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   }
 
   if (error) {
-    return (
-      <div className="bg-surface border-4 border-primary woodcut-shadow p-8 text-center">
-        <p className="font-body-md text-body-md text-secondary mb-4">{error}</p>
-        <button onClick={fetchToday} className="btn-woodcut px-6 py-3">Retry</button>
-      </div>
-    );
+    return <SessionErrorPanel error={error} onRetry={fetchToday} />;
   }
 
   const today = date ? new Date(date + 'T00:00:00') : new Date();
@@ -91,6 +124,15 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
     const n = (i.name || '').toLowerCase();
     return n !== 'water' && n !== 'exercise';
   });
+  const customItems = checklist.filter(i => (i.category || '').toLowerCase() === 'custom')
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const pillarToggleItems = otherQuickItems
+    .filter(i => ['study', 'abhishekam'].includes((i.name || '').toLowerCase()))
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const optionalToggleItems = otherQuickItems
+    .filter(i => ['music', 'morning mantras'].includes((i.name || '').toLowerCase()))
+    .sort((a, b) => (a.sort_order ?? 0) - (b.sort_order ?? 0));
+  const hasOptionalSection = optionalToggleItems.length > 0 || customItems.length > 0;
   const akyItems = checklist.filter(i => {
     const c = (i.category || '').toLowerCase();
     return c !== 'quick' && c !== 'japa';
@@ -110,6 +152,8 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
 
   return (
     <div className="space-y-8 md:space-y-12">
+      <ReceivedNudgesBanner />
+
       <header className="flex flex-col md:flex-row md:justify-between md:items-start border-b-4 border-primary pb-6 gap-4">
         <div className="flex-1 min-w-0">
           <div className="flex items-start justify-between gap-4">
@@ -258,45 +302,192 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
               }}
             />
           )}
-
-          {otherQuickItems.length > 0 && (
-          <div className="grid grid-cols-2 gap-3 flex-1">
-            {otherQuickItems.map(item => {
-              const name = item.name || '';
-              const done = item.completed;
-              const icons = { exercise: 'fitness_center', water: 'water_drop', study: 'menu_book', abhishekam: 'water' };
-              const icon = icons[name.toLowerCase()] || 'check_circle';
-              return (
-                <button
-                  key={item.id}
-                  onClick={() => handleToggle(item.id)}
-                  className={`border-2 border-primary p-4 flex flex-col items-center justify-center gap-3 transition-colors group ${
-                    done
-                      ? 'bg-primary text-on-primary woodcut-shadow-sm'
-                      : 'hover:bg-secondary hover:text-on-secondary hover:border-secondary'
-                  }`}
-                >
-                  <span
-                    className="material-symbols-outlined text-[32px] group-hover:scale-110 transition-transform"
-                    style={{ fontVariationSettings: `'FILL' ${done ? 1 : 0}` }}
-                  >
-                    {icon}
-                  </span>
-                  <span className="font-label-sm text-label-sm uppercase text-center">
-                    {name}{done ? ' (Done)' : ''}
-                  </span>
-                </button>
-              );
-            })}
-          </div>
-          )}
         </div>
+
+        {pillarToggleItems.length > 0 && (
+        <div className="col-span-1 lg:col-span-12 grid grid-cols-2 gap-3 relative z-10">
+          {pillarToggleItems.map(item => (
+            <QuickToggleButton key={item.id} item={item} onToggle={handleToggle} />
+          ))}
+        </div>
+        )}
+
+        {hasOptionalSection && (
+          <section className="col-span-1 lg:col-span-12 relative z-10">
+            <h3 className="font-headline-sm text-headline-sm uppercase mb-3 border-b-2 border-primary pb-2">
+              Optional
+            </h3>
+            <div className="grid grid-cols-2 gap-3">
+              {optionalToggleItems.map(item => (
+                <QuickToggleButton key={item.id} item={item} onToggle={handleToggle} />
+              ))}
+              {customItems.map(item => (
+                <CustomQuickToggle
+                  key={item.id}
+                  item={item}
+                  onToggle={handleToggle}
+                  onEdit={() => openCustomEdit(item)}
+                />
+              ))}
+            </div>
+          </section>
+        )}
+
+        {editingCustom && (
+          <div
+            className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/40"
+            onClick={() => setEditingCustom(null)}
+            role="presentation"
+          >
+            <form
+              onSubmit={saveCustomLabel}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-surface border-4 border-primary p-6 w-full max-w-sm"
+              role="dialog"
+              aria-labelledby="custom-label-title"
+            >
+              <h3 id="custom-label-title" className="font-headline-sm text-headline-sm text-primary mb-2">
+                Name your practice
+              </h3>
+              <p className="font-body-md text-body-md text-on-surface-variant mb-4">
+                What do you want to track in this box?
+              </p>
+              <input
+                type="text"
+                value={customLabelDraft}
+                onChange={(e) => setCustomLabelDraft(e.target.value)}
+                placeholder="e.g. Pranayama, Reading, Walk…"
+                maxLength={24}
+                autoFocus
+                className="w-full border-2 border-primary bg-surface-bright px-4 py-3 font-body-md text-body-md mb-3 focus:outline-none focus:ring-2 focus:ring-secondary"
+              />
+              {customLabelError && (
+                <p className="font-label-sm text-label-sm text-secondary mb-3">{customLabelError}</p>
+              )}
+              <div className="flex gap-3">
+                <button
+                  type="button"
+                  onClick={() => setEditingCustom(null)}
+                  className="flex-1 border-2 border-primary py-3 font-label-sm text-label-sm uppercase hover:bg-surface-variant transition-colors"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={savingCustomLabel}
+                  className="flex-1 border-2 border-primary bg-primary text-on-primary py-3 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50"
+                >
+                  {savingCustomLabel ? 'Saving…' : 'Save'}
+                </button>
+              </div>
+            </form>
+          </div>
+        )}
       </div>
     </div>
   );
 });
 
 export default TodayScreen;
+
+const QUICK_ICONS = {
+  study: 'menu_book',
+  abhishekam: 'water',
+  music: 'music_note',
+  'morning mantras': 'wb_twilight',
+};
+
+function CustomQuickToggle({ item, onToggle, onEdit }) {
+  const name = item.name || 'Custom';
+  const done = item.completed;
+  const isDefault = name === 'Custom';
+  const isLongLabel = name.length > 12;
+
+  const handleClick = () => {
+    if (isDefault) {
+      onEdit();
+      return;
+    }
+    onToggle(item.id);
+  };
+
+  return (
+    <div className="relative">
+      <button
+        type="button"
+        onClick={handleClick}
+        className={`w-full border-2 p-3 sm:p-4 flex flex-col items-center justify-center gap-2 sm:gap-3 transition-colors group min-h-[5.5rem] cursor-pointer touch-manipulation relative z-10 active:scale-[0.98] ${
+          done
+            ? 'border-[#15803d] bg-[#15803d] text-white woodcut-shadow-sm'
+            : isDefault
+              ? 'border-dashed border-primary bg-surface-bright hover:bg-surface-variant'
+              : 'border-primary hover:bg-secondary hover:text-on-secondary hover:border-secondary bg-surface'
+        }`}
+        style={{ WebkitTapHighlightColor: 'transparent' }}
+        aria-label={isDefault ? 'Name this optional activity' : `${name}${done ? ', completed' : ''}`}
+      >
+        <span
+          className="material-symbols-outlined text-[28px] sm:text-[32px] group-hover:scale-110 transition-transform"
+          style={{ fontVariationSettings: `'FILL' ${done ? 1 : 0}` }}
+        >
+          {isDefault ? 'add_circle' : 'star'}
+        </span>
+        <span className={`font-label-sm text-label-sm uppercase text-center leading-tight ${isLongLabel ? 'text-[10px] sm:text-label-sm' : ''} ${isDefault ? 'text-on-surface-variant' : ''}`}>
+          {isDefault ? 'Custom' : name}{!isDefault && done ? ' ✓' : ''}
+        </span>
+        {isDefault && (
+          <span className="font-label-sm text-[10px] uppercase text-on-surface-variant opacity-80">
+            Tap to name
+          </span>
+        )}
+      </button>
+      {!isDefault && (
+        <button
+          type="button"
+          onClick={(e) => {
+            e.stopPropagation();
+            onEdit();
+          }}
+          className="absolute top-1 right-1 z-20 p-1 rounded-full hover:bg-surface-variant transition-colors"
+          title="Rename practice"
+          aria-label={`Rename ${name}`}
+        >
+          <span className="material-symbols-outlined text-base text-on-surface-variant">edit</span>
+        </button>
+      )}
+    </div>
+  );
+}
+
+function QuickToggleButton({ item, onToggle }) {
+  const name = item.name || '';
+  const done = item.completed;
+  const icon = QUICK_ICONS[name.toLowerCase()] || 'check_circle';
+  const isLongLabel = name.length > 12;
+
+  return (
+    <button
+      type="button"
+      onClick={() => onToggle(item.id)}
+      className={`border-2 p-3 sm:p-4 flex flex-col items-center justify-center gap-2 sm:gap-3 transition-colors group min-h-[5.5rem] cursor-pointer touch-manipulation relative z-10 active:scale-[0.98] ${
+        done
+          ? 'border-[#15803d] bg-[#15803d] text-white woodcut-shadow-sm'
+          : 'border-primary hover:bg-secondary hover:text-on-secondary hover:border-secondary bg-surface'
+      }`}
+      style={{ WebkitTapHighlightColor: 'transparent' }}
+    >
+      <span
+        className="material-symbols-outlined text-[28px] sm:text-[32px] group-hover:scale-110 transition-transform"
+        style={{ fontVariationSettings: `'FILL' ${done ? 1 : 0}` }}
+      >
+        {icon}
+      </span>
+      <span className={`font-label-sm text-label-sm uppercase text-center leading-tight ${isLongLabel ? 'text-[10px] sm:text-label-sm' : ''}`}>
+        {name}{done ? ' ✓' : ''}
+      </span>
+    </button>
+  );
+}
 
 function ExerciseTracker({ date, completed, onGoalChange }) {
   const [elapsed, setElapsed] = useState(0);

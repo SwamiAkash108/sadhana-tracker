@@ -1,9 +1,13 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { useAuth } from '../context/AuthContext';
+import { api } from '../api';
 import TodayScreen from './TodayScreen';
 import ProgressScreen from './ProgressScreen';
 import TeamScreen from './TeamScreen';
 import AkyScreen from './AkyScreen';
+import FriendRequestsBell from './FriendRequestsBell';
+import NotificationToggle from './NotificationToggle';
+import CommitmentModal from './CommitmentModal';
 
 const TABS = [
   { key: 'today', label: 'Today', icon: 'event_note' },
@@ -12,15 +16,62 @@ const TABS = [
 ];
 
 export default function Dashboard() {
-  const { user, logout } = useAuth();
+  const { user, logout, acceptCommitment } = useAuth();
   const [tab, setTab] = useState('today');
   const [showAky, setShowAky] = useState(false);
+  const [incomingRequestCount, setIncomingRequestCount] = useState(0);
+  const [focusPendingRequests, setFocusPendingRequests] = useState(false);
+  const [acceptingCommitment, setAcceptingCommitment] = useState(false);
+  const [commitmentError, setCommitmentError] = useState('');
+
+  const refreshFriendRequests = useCallback(async () => {
+    try {
+      const data = await api.getFriendRequests();
+      setIncomingRequestCount(data.incoming?.length || 0);
+    } catch {
+      setIncomingRequestCount(0);
+    }
+  }, []);
+
+  useEffect(() => {
+    refreshFriendRequests();
+    const id = setInterval(refreshFriendRequests, 60_000);
+    const onFocus = () => refreshFriendRequests();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') refreshFriendRequests();
+    };
+    window.addEventListener('focus', onFocus);
+    document.addEventListener('visibilitychange', onVisible);
+    return () => {
+      clearInterval(id);
+      window.removeEventListener('focus', onFocus);
+      document.removeEventListener('visibilitychange', onVisible);
+    };
+  }, [refreshFriendRequests]);
+
+  const openFriendRequests = () => {
+    setShowAky(false);
+    setTab('community');
+    setFocusPendingRequests(true);
+  };
+
+  const handleAcceptCommitment = async () => {
+    setCommitmentError('');
+    setAcceptingCommitment(true);
+    try {
+      await acceptCommitment();
+    } catch (err) {
+      setCommitmentError(err.message || 'Could not save your commitment. Please try again.');
+    } finally {
+      setAcceptingCommitment(false);
+    }
+  };
 
   const today = new Date();
   const dateStr = today.toLocaleDateString('en-US', { month: 'short', year: '2-digit' }).toUpperCase();
 
   return (
-    <div className="bg-background text-on-background font-body-md min-h-screen flex flex-col pt-[5.875rem] sm:pt-[8.375rem] md:pt-[9.875rem] lg:pt-[11.375rem] pb-24 md:pb-0">
+    <div className="bg-background text-on-background font-body-md min-h-0 md:min-h-screen flex flex-col pt-[5.875rem] sm:pt-[8.375rem] md:pt-[9.875rem] lg:pt-[11.375rem] pb-24 md:pb-0">
       <header className="bg-background text-primary font-headline-sm flex justify-between items-center gap-2 w-full px-margin-mobile py-2 sm:py-3 fixed top-0 z-50 border-b-4 border-primary">
         <div className="flex items-center gap-2 sm:gap-3 min-w-0 flex-1">
           <img
@@ -34,20 +85,32 @@ export default function Dashboard() {
         </div>
         <div className="flex items-center gap-1 sm:gap-2 shrink-0">
           <span className="hidden sm:inline-block font-label-sm text-label-sm font-bold border-2 border-primary px-2 sm:px-3 py-1 bg-surface">{dateStr}</span>
-          <button onClick={logout} className="p-1.5 sm:p-2 hover:bg-surface-variant rounded-full transition-colors" title="Sign out">
-            <span className="material-symbols-outlined">logout</span>
+          <FriendRequestsBell count={incomingRequestCount} onClick={openFriendRequests} />
+          <NotificationToggle />
+          <button
+            onClick={logout}
+            className="flex items-center justify-center shrink-0 w-10 h-10 sm:w-11 sm:h-11 rounded-full hover:bg-surface-variant transition-colors"
+            title="Sign out"
+          >
+            <span className="material-symbols-outlined text-[24px] leading-none">logout</span>
           </button>
         </div>
       </header>
 
-      <main className="flex-grow container mx-auto px-margin-mobile md:px-margin-desktop py-8 max-w-lg md:max-w-4xl flex flex-col gap-8">
+      <main className="container mx-auto px-margin-mobile md:px-margin-desktop pt-8 pb-4 md:py-8 max-w-lg md:max-w-4xl flex flex-col gap-8">
         {showAky ? (
           <AkyScreen onClose={() => setShowAky(false)} />
         ) : (
           <>
             {tab === 'today' && <TodayScreen user={user} onOpenAky={() => setShowAky(true)} />}
             {tab === 'progress' && <ProgressScreen user={user} />}
-            {tab === 'community' && <TeamScreen />}
+            {tab === 'community' && (
+              <TeamScreen
+                focusPendingRequests={focusPendingRequests}
+                onPendingRequestsViewed={() => setFocusPendingRequests(false)}
+                onRequestsChange={refreshFriendRequests}
+              />
+            )}
           </>
         )}
       </main>
@@ -96,6 +159,19 @@ export default function Dashboard() {
           );
         })}
       </div>
+
+      {user && !user.commitmentAccepted && (
+        <CommitmentModal
+          userName={user.name}
+          onAccept={handleAcceptCommitment}
+          accepting={acceptingCommitment}
+        />
+      )}
+      {commitmentError && !user?.commitmentAccepted && (
+        <div className="fixed bottom-24 md:bottom-6 left-1/2 -translate-x-1/2 z-[111] max-w-sm w-[calc(100%-2rem)] bg-error-container text-on-error-container border-2 border-error px-4 py-3 font-label-sm text-label-sm text-center">
+          {commitmentError}
+        </div>
+      )}
     </div>
   );
 }

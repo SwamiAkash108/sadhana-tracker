@@ -1,16 +1,20 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { useAuth } from '../context/AuthContext';
+import {
+  getMemberMotivationalDisplay,
+  getMemberOptionalItems,
+  getMemberPillarRows,
+} from '../utils/memberProgress';
+import SessionErrorPanel from './SessionErrorPanel';
 
-export default function TeamScreen() {
+export default function TeamScreen({ focusPendingRequests = false, onPendingRequestsViewed, onRequestsChange }) {
   const { user } = useAuth();
   const [team, setTeam] = useState(null);
+  const [groups, setGroups] = useState([]);
   const [requests, setRequests] = useState({ incoming: [], outgoing: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-  const [practitioners, setPractitioners] = useState([]);
-  const [directoryError, setDirectoryError] = useState('');
   const [actionId, setActionId] = useState(null);
   const [requestsError, setRequestsError] = useState('');
 
@@ -36,39 +40,18 @@ export default function TeamScreen() {
     }
 
     try {
-      const directoryData = await api.listPractitioners();
-      setPractitioners(directoryData.users || []);
-      setDirectoryError('');
-    } catch (err) {
-      setPractitioners([]);
-      setDirectoryError(err.message);
+      const groupData = await api.getGroups();
+      setGroups(groupData.groups || []);
+    } catch {
+      setGroups([]);
     }
 
     setError(teamError);
     setLoading(false);
-  }, []);
+    onRequestsChange?.();
+  }, [onRequestsChange]);
 
   useEffect(() => { fetchAll(); }, [fetchAll]);
-
-  const refreshDirectory = async () => {
-    const directoryData = await api.listPractitioners();
-    setPractitioners(directoryData.users || []);
-  };
-
-  const handleSendRequest = async (userId) => {
-    setActionId(userId);
-    try {
-      await api.sendFriendRequest(userId);
-      const requestData = await api.getFriendRequests();
-      setRequests(requestData);
-      await refreshDirectory();
-      await fetchAll();
-    } catch (err) {
-      setDirectoryError(err.message);
-    } finally {
-      setActionId(null);
-    }
-  };
 
   const handleAccept = async (requestId) => {
     setActionId(requestId);
@@ -116,12 +99,7 @@ export default function TeamScreen() {
   }
 
   if (error && !team) {
-    return (
-      <div className="bg-surface border-4 border-primary woodcut-shadow p-8 text-center">
-        <p className="font-body-md text-body-md text-secondary mb-4">{error}</p>
-        <button onClick={fetchAll} className="btn-woodcut px-6 py-3">Retry</button>
-      </div>
-    );
+    return <SessionErrorPanel error={error} onRetry={fetchAll} />;
   }
 
   const members = team?.members || [];
@@ -129,14 +107,6 @@ export default function TeamScreen() {
   const incoming = requests.incoming || [];
   const outgoing = requests.outgoing || [];
   const pendingCount = incoming.length + outgoing.length;
-  const incomingByUserId = Object.fromEntries(incoming.map(r => [r.user_id, r.id]));
-
-  const q = searchQuery.trim().toLowerCase();
-  const filteredPractitioners = q
-    ? practitioners.filter(u =>
-        u.name.toLowerCase().includes(q) || u.email.toLowerCase().includes(q)
-      )
-    : practitioners;
 
   return (
     <div className="space-y-10">
@@ -151,80 +121,57 @@ export default function TeamScreen() {
       <section>
         <h3 className="font-headline-sm text-headline-sm uppercase mb-4">Today&apos;s Practice</h3>
 
-        {members.length === 0 ? (
+        {groups.length === 0 ? (
           <div className="bg-surface border-4 border-primary woodcut-shadow p-12 text-center">
             <span className="material-symbols-outlined text-5xl text-outline mb-4">groups</span>
             <p className="font-body-lg text-body-lg text-on-surface-variant">
-              No sangha members yet. Use Add to Sangha below to find fellow practitioners.
+              Create a sangha group below to organize your practice circles.
             </p>
           </div>
         ) : (
-          <div className="grid md:grid-cols-2 gap-8">
-            {members.map(m => (
-              <MemberCard
-                key={m.id}
-                member={m}
-                isSelf={m.id === user?.id}
-                removing={actionId === m.id}
-                onRemove={handleRemoveFriend}
-              />
-            ))}
+          <div className="space-y-4">
+            {groups.map(group => {
+              const groupMembers = members.filter(m => group.member_ids.includes(m.id));
+              return (
+                <CollapsibleSection
+                  key={group.id}
+                  title={group.name}
+                  badge={groupMembers.length}
+                >
+                  {groupMembers.length === 0 ? (
+                    <p className="font-body-md text-body-md text-on-surface-variant">
+                      No one in this group yet. Add members from Manage Sanghas below.
+                    </p>
+                  ) : (
+                    <MemberGrid
+                      members={groupMembers}
+                      user={user}
+                      actionId={actionId}
+                      onRemove={handleRemoveFriend}
+                    />
+                  )}
+                </CollapsibleSection>
+              );
+            })}
           </div>
         )}
       </section>
 
-      <CollapsibleSection title="Add to Sangha">
-        <p className="font-body-md text-body-md text-on-surface-variant mb-4">
-          Browse everyone on the server and send a Sangha request, or filter by name or email.
-        </p>
-
-        <div className="relative mb-4">
-          <span className="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
-          <input
-            type="search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="Filter practitioners…"
-            className="w-full border-2 border-primary bg-surface-bright pl-10 pr-4 py-3 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
-          />
-        </div>
-
-        {directoryError && (
-          <p className="font-label-sm text-label-sm text-secondary mb-3">{directoryError}</p>
-        )}
-
-        {practitioners.length === 0 && !directoryError ? (
-          <p className="font-label-sm text-label-sm text-on-surface-variant">
-            No other practitioners on the server yet.
-          </p>
-        ) : filteredPractitioners.length > 0 ? (
-          <ul className="divide-y-2 divide-primary border-2 border-primary max-h-80 overflow-y-auto">
-            {filteredPractitioners.map(u => (
-              <li key={u.id} className="flex items-center justify-between gap-3 p-3 bg-surface-bright">
-                <div className="min-w-0">
-                  <p className="font-body-md text-body-md text-primary truncate">{u.name}</p>
-                  <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{u.email}</p>
-                </div>
-                <RelationButton
-                  relation={u.relation}
-                  loading={actionId === u.id || actionId === incomingByUserId[u.id]}
-                  requestId={incomingByUserId[u.id]}
-                  onRequest={() => handleSendRequest(u.id)}
-                  onAccept={(id) => handleAccept(id)}
-                  onDecline={(id) => handleDecline(id)}
-                />
-              </li>
-            ))}
-          </ul>
-        ) : (
-          <p className="font-label-sm text-label-sm text-on-surface-variant">No practitioners match your filter.</p>
-        )}
+      <CollapsibleSection title="Manage Sanghas">
+        <SanghaGroupsManager
+          groups={groups}
+          members={members}
+          actionId={actionId}
+          setActionId={setActionId}
+          onChange={fetchAll}
+        />
       </CollapsibleSection>
 
       <CollapsibleSection
         title="Pending Requests"
         badge={pendingCount > 0 ? pendingCount : null}
-        defaultOpen={incoming.length > 0}
+        defaultOpen={focusPendingRequests}
+        onOpen={onPendingRequestsViewed}
       >
         {requestsError && (
           <p className="font-label-sm text-label-sm text-secondary mb-4">
@@ -299,12 +246,259 @@ export default function TeamScreen() {
   );
 }
 
-function CollapsibleSection({ title, badge, defaultOpen = false, children }) {
+function MemberGrid({ members, user, actionId, onRemove }) {
+  return (
+    <div className="grid md:grid-cols-2 gap-8">
+      {members.map(m => (
+        <MemberCard
+          key={m.id}
+          member={m}
+          isSelf={m.id === user?.id}
+          removing={actionId === m.id}
+          onRemove={onRemove}
+        />
+      ))}
+    </div>
+  );
+}
+
+function SanghaGroupsManager({ groups, members, actionId, setActionId, onChange }) {
+  const [newGroupName, setNewGroupName] = useState('');
+  const [groupError, setGroupError] = useState('');
+  const [creating, setCreating] = useState(false);
+
+  const handleCreate = async (e) => {
+    e.preventDefault();
+    const name = newGroupName.trim();
+    if (!name) return;
+    setGroupError('');
+    setCreating(true);
+    try {
+      await api.createGroup(name);
+      setNewGroupName('');
+      await onChange();
+    } catch (err) {
+      setGroupError(err.message);
+    } finally {
+      setCreating(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <p className="font-body-md text-body-md text-on-surface-variant">
+        Organize your sangha into circles — boyz, girlz, house, or any group you like.
+        Someone can belong to more than one group.
+      </p>
+
+      <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3">
+        <input
+          type="text"
+          value={newGroupName}
+          onChange={(e) => setNewGroupName(e.target.value)}
+          placeholder="New group name…"
+          maxLength={40}
+          className="flex-1 border-2 border-primary bg-surface-bright px-4 py-3 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
+        />
+        <button
+          type="submit"
+          disabled={creating || !newGroupName.trim()}
+          className="border-2 border-primary bg-primary text-on-primary px-6 py-3 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50 shrink-0"
+        >
+          {creating ? 'Creating…' : 'Create Group'}
+        </button>
+      </form>
+
+      {groupError && (
+        <p className="font-label-sm text-label-sm text-secondary">{groupError}</p>
+      )}
+
+      {groups.length === 0 ? (
+        <p className="font-label-sm text-label-sm text-on-surface-variant">
+          No groups yet. Create one above — then add sangha members to it.
+        </p>
+      ) : (
+        <div className="space-y-3">
+          {groups.map(group => (
+            <GroupEditor
+              key={group.id}
+              group={group}
+              members={members}
+              actionId={actionId}
+              setActionId={setActionId}
+              onChange={onChange}
+              setGroupError={setGroupError}
+            />
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function GroupEditor({ group, members, actionId, setActionId, onChange, setGroupError }) {
+  const [name, setName] = useState(group.name);
+  const [addUserId, setAddUserId] = useState('');
+
+  useEffect(() => {
+    setName(group.name);
+  }, [group.name]);
+
+  const memberById = Object.fromEntries(members.map(m => [m.id, m]));
+  const groupMembers = group.member_ids
+    .map(id => memberById[id])
+    .filter(Boolean);
+  const availableToAdd = members.filter(m => !group.member_ids.includes(m.id));
+
+  const handleRename = async () => {
+    const trimmed = name.trim();
+    if (!trimmed || trimmed === group.name) {
+      setName(group.name);
+      return;
+    }
+    setGroupError('');
+    setActionId(`rename-${group.id}`);
+    try {
+      await api.updateGroup(group.id, trimmed);
+      await onChange();
+    } catch (err) {
+      setGroupError(err.message);
+      setName(group.name);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleDelete = async () => {
+    if (!window.confirm(`Delete group "${group.name}"? Members stay in your sangha.`)) return;
+    setGroupError('');
+    setActionId(`delete-${group.id}`);
+    try {
+      await api.deleteGroup(group.id);
+      await onChange();
+    } catch (err) {
+      setGroupError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleAddMember = async (e) => {
+    e.preventDefault();
+    if (!addUserId) return;
+    setGroupError('');
+    setActionId(`add-${group.id}-${addUserId}`);
+    try {
+      await api.addGroupMember(group.id, addUserId);
+      setAddUserId('');
+      await onChange();
+    } catch (err) {
+      setGroupError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleRemoveMember = async (userId) => {
+    setGroupError('');
+    setActionId(`remove-${group.id}-${userId}`);
+    try {
+      await api.removeGroupMember(group.id, userId);
+      await onChange();
+    } catch (err) {
+      setGroupError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const busy = actionId?.startsWith(`rename-${group.id}`)
+    || actionId?.startsWith(`delete-${group.id}`)
+    || actionId?.includes(group.id);
+
+  return (
+    <CollapsibleSection title={group.name} badge={groupMembers.length}>
+      <div className="space-y-4">
+        <div className="flex flex-col sm:flex-row gap-3">
+          <input
+            type="text"
+            value={name}
+            onChange={(e) => setName(e.target.value)}
+            onBlur={handleRename}
+            maxLength={40}
+            disabled={busy}
+            className="flex-1 border-2 border-primary bg-surface-bright px-4 py-2 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
+          />
+          <button
+            type="button"
+            onClick={handleDelete}
+            disabled={busy}
+            className="border-2 border-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-secondary hover:text-on-secondary hover:border-secondary transition-colors disabled:opacity-50 shrink-0"
+          >
+            Delete Group
+          </button>
+        </div>
+
+        {groupMembers.length > 0 ? (
+          <ul className="divide-y-2 divide-primary border-2 border-primary">
+            {groupMembers.map(m => (
+              <li key={m.id} className="flex items-center justify-between gap-3 p-3 bg-surface-bright">
+                <span className="font-body-md text-body-md text-primary truncate">{m.name}</span>
+                <button
+                  type="button"
+                  disabled={busy}
+                  onClick={() => handleRemoveMember(m.id)}
+                  className="font-label-sm text-label-sm uppercase border-2 border-primary px-3 py-1 hover:bg-surface-variant transition-colors disabled:opacity-50 shrink-0"
+                >
+                  Remove
+                </button>
+              </li>
+            ))}
+          </ul>
+        ) : (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">No members yet.</p>
+        )}
+
+        {availableToAdd.length > 0 ? (
+          <form onSubmit={handleAddMember} className="flex flex-col sm:flex-row gap-3">
+            <select
+              value={addUserId}
+              onChange={(e) => setAddUserId(e.target.value)}
+              disabled={busy}
+              className="flex-1 border-2 border-primary bg-surface-bright px-4 py-3 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
+            >
+              <option value="">Add sangha member…</option>
+              {availableToAdd.map(m => (
+                <option key={m.id} value={m.id}>{m.name}</option>
+              ))}
+            </select>
+            <button
+              type="submit"
+              disabled={busy || !addUserId}
+              className="border-2 border-primary bg-primary text-on-primary px-6 py-3 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50 shrink-0"
+            >
+              Add
+            </button>
+          </form>
+        ) : (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">
+            All sangha members are already in this group.
+          </p>
+        )}
+      </div>
+    </CollapsibleSection>
+  );
+}
+
+function CollapsibleSection({ title, badge, defaultOpen = false, onOpen, children }) {
   const [open, setOpen] = useState(defaultOpen);
 
   useEffect(() => {
-    if (defaultOpen) setOpen(true);
-  }, [defaultOpen]);
+    if (defaultOpen) {
+      setOpen(true);
+      onOpen?.();
+    }
+  }, [defaultOpen, onOpen]);
 
   return (
     <section className="border-4 border-primary bg-surface woodcut-shadow">
@@ -331,77 +525,18 @@ function CollapsibleSection({ title, badge, defaultOpen = false, children }) {
   );
 }
 
-function RelationButton({ relation, loading, requestId, onRequest, onAccept, onDecline }) {
-  if (relation === 'friend') {
-    return (
-      <span className="font-label-sm text-label-sm uppercase text-[#15803d] border-2 border-[#15803d] px-3 py-1.5 shrink-0">
-        In Sangha
-      </span>
-    );
-  }
-  if (relation === 'pending_outgoing') {
-    return (
-      <span className="font-label-sm text-label-sm uppercase text-on-surface-variant border-2 border-outline-variant px-3 py-1.5 shrink-0">
-        Pending
-      </span>
-    );
-  }
-  if (relation === 'pending_incoming' && requestId) {
-    return (
-      <div className="flex gap-2 shrink-0">
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => onAccept(requestId)}
-          className="border-2 border-primary bg-primary text-on-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50"
-        >
-          Accept
-        </button>
-        <button
-          type="button"
-          disabled={loading}
-          onClick={() => onDecline(requestId)}
-          className="border-2 border-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-surface-variant transition-colors disabled:opacity-50"
-        >
-          Decline
-        </button>
-      </div>
-    );
-  }
-  return (
-    <button
-      type="button"
-      disabled={loading}
-      onClick={onRequest}
-      className="border-2 border-primary bg-primary text-on-primary px-3 py-1.5 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors shrink-0 disabled:opacity-50"
-    >
-      {loading ? '…' : 'Request'}
-    </button>
-  );
-}
-
 function MemberCard({ member, isSelf, removing, onRemove }) {
-  const pct = member.percentage || 0;
-  const done = pct >= 100;
-  const quickItems = (member.items || []).filter(i => (i.category || '').toLowerCase() === 'quick');
-
-  const stats = [
-    { icon: '📿', label: 'Japa', val: member.japaDone ? '60m' : '--' },
-    { icon: '🧘', label: 'AKY', val: `${member.akyDone || 0}/${member.akyTotal || 0}` },
-  ];
-
-  for (const item of quickItems) {
-    stats.push({
-      icon: item.name === 'Water' ? '💧' : item.name === 'Study' ? '📖' : item.name === 'Abhishekam' ? '🪷' : '🏃',
-      label: item.name,
-      val: item.completed ? '✅' : '--',
-    });
-  }
+  const [optionalOpen, setOptionalOpen] = useState(false);
+  const progress = getMemberMotivationalDisplay(member);
+  const pillarRows = getMemberPillarRows(member);
+  const optionalItems = getMemberOptionalItems(member);
+  const optionalDone = optionalItems.filter(i => i.completed).length;
+  const isCelebrating = progress.displayPct >= 100;
 
   return (
-    <article className={`bg-surface woodcut-shadow border-4 border-primary p-6 relative ${!done ? 'opacity-80' : ''}`}>
+    <article className={`bg-surface woodcut-shadow border-4 border-primary p-6 relative ${!isCelebrating ? 'opacity-90' : ''}`}>
       <div className="absolute inset-0 halftone-bg opacity-5 pointer-events-none" />
-      <div className="flex justify-between items-start mb-6 border-b border-outline pb-4 relative z-10">
+      <div className="flex justify-between items-start mb-4 border-b border-outline pb-4 relative z-10">
         <div>
           <h3 className="font-headline-sm text-headline-sm text-primary">
             {member.name || 'Practitioner'}
@@ -409,51 +544,95 @@ function MemberCard({ member, isSelf, removing, onRemove }) {
               <span className="font-label-sm text-label-sm text-on-surface-variant normal-case ml-2">(You)</span>
             )}
           </h3>
-          <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-wider mt-1">
-            {done ? 'Full Practice' : 'In Progress'}
+          <p className="font-label-sm text-label-sm uppercase tracking-wider mt-1" style={{ color: progress.color }}>
+            {progress.statusLabel}
           </p>
         </div>
-        <span className={`font-label-sm text-label-sm uppercase tracking-widest px-3 py-1 border-2 ${
-          done ? 'bg-primary text-on-primary border-primary'
-            : pct > 0 ? 'bg-secondary text-on-secondary border-secondary'
-              : 'text-on-surface-variant border-outline-variant'
-        }`}>
-          {done ? 'Complete' : pct > 0 ? 'Partial' : 'Awaiting'}
+        <span className={`font-label-sm text-label-sm uppercase tracking-widest px-3 py-1 border-2 ${progress.badgeClass}`}>
+          {progress.badge}
         </span>
       </div>
-      <div className="flex items-center gap-6 mb-6 relative z-10">
-        <div className="relative w-20 h-20">
+
+      <p className="font-body-md text-body-md text-on-surface-variant mb-4 relative z-10">
+        {progress.message}
+      </p>
+
+      <div className="flex items-center gap-6 mb-4 relative z-10">
+        <div className="relative w-20 h-20 shrink-0">
           <svg className="w-full h-full -rotate-90" viewBox="0 0 100 100">
             <circle cx="50" cy="50" fill="none" r="42" stroke="#e5e2e1" strokeWidth="8" />
             <circle
               cx="50" cy="50" fill="none" r="42"
-              stroke={done ? '#000' : '#b22a27'}
-              strokeDasharray={`${(pct / 100) * 264} 264`}
+              stroke={progress.color}
+              strokeDasharray={`${(progress.ringPct / 100) * 264} 264`}
               strokeWidth="8"
               strokeLinecap="square"
             />
           </svg>
-          <div className="absolute inset-0 flex items-center justify-center">
-            <span className="font-headline-sm text-headline-sm text-primary">{pct}%</span>
+          <div className="absolute inset-0 flex items-center justify-center px-1">
+            <span
+              className="font-headline-sm text-[17px] leading-none tabular-nums tracking-tight"
+              style={{ color: progress.color }}
+            >
+              {progress.displayPct}%
+            </span>
           </div>
         </div>
-        <div className="flex-1 space-y-2">
-          {stats.map(s => (
-            <div key={s.label} className="flex items-center justify-between text-sm">
-              <span className="flex items-center gap-2 font-body-md text-body-md text-on-surface-variant">
-                <span>{s.icon}</span> {s.label}
+        <div className="flex-1 space-y-1.5">
+          {pillarRows.map(row => (
+            <div key={row.key} className="flex items-center justify-between text-sm">
+              <span className={`flex items-center gap-2 font-body-md text-body-md ${row.met ? 'text-[#15803d]' : 'text-on-surface-variant'}`}>
+                <span>{row.icon}</span> {row.label}
               </span>
-              <span className="font-label-sm text-label-sm font-bold text-primary">{s.val}</span>
+              <span className={`font-label-sm text-label-sm font-bold ${row.met ? 'text-[#15803d]' : 'text-primary'}`}>
+                {row.val}
+              </span>
             </div>
           ))}
         </div>
       </div>
+
+      {optionalItems.length > 0 && (
+        <div className="relative z-10 border-t-2 border-primary pt-3">
+          <button
+            type="button"
+            onClick={() => setOptionalOpen(v => !v)}
+            className="w-full flex items-center justify-between gap-2 py-1 text-left hover:opacity-80 transition-opacity"
+            aria-expanded={optionalOpen}
+          >
+            <span className="font-label-sm text-label-sm uppercase text-on-surface-variant">
+              Optional {optionalDone > 0 ? `· ${optionalDone}/${optionalItems.length}` : ''}
+            </span>
+            <span
+              className="material-symbols-outlined text-primary text-xl transition-transform"
+              style={{ transform: optionalOpen ? 'rotate(180deg)' : undefined }}
+            >
+              expand_more
+            </span>
+          </button>
+          {optionalOpen && (
+            <ul className="mt-2 space-y-1.5">
+              {optionalItems.map(item => (
+                <li key={item.id} className="flex items-center justify-between">
+                  <span className={`font-body-md text-body-md ${item.completed ? 'text-[#15803d]' : 'text-on-surface-variant'}`}>
+                    {item.name}
+                  </span>
+                  <span className={`font-label-sm text-label-sm font-bold ${item.completed ? 'text-[#15803d]' : 'text-primary'}`}>
+                    {item.completed ? '✓' : '--'}
+                  </span>
+                </li>
+              ))}
+            </ul>
+          )}
+        </div>
+      )}
+
       {!isSelf && (
         <button
           type="button"
           disabled={removing}
           onClick={() => onRemove(member.id)}
-          className="relative z-10 w-full mt-2 border-2 border-primary py-2.5 font-label-sm text-label-sm uppercase flex items-center justify-center gap-2 hover:bg-secondary hover:text-on-secondary hover:border-secondary transition-colors disabled:opacity-50"
+          className="relative z-10 w-full mt-4 border-2 border-primary py-2.5 font-label-sm text-label-sm uppercase flex items-center justify-center gap-2 hover:bg-secondary hover:text-on-secondary hover:border-secondary transition-colors disabled:opacity-50"
         >
           <span className="material-symbols-outlined text-lg">person_remove</span>
           {removing ? 'Removing…' : 'Remove from Sangha'}

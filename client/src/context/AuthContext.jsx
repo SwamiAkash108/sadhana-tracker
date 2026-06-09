@@ -1,5 +1,5 @@
 import { createContext, useContext, useState, useEffect, useCallback } from 'react';
-import { api } from '../api';
+import { api, setUnauthorizedHandler } from '../api';
 
 const AuthContext = createContext(null);
 
@@ -8,11 +8,22 @@ export function AuthProvider({ children }) {
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    setUnauthorizedHandler(() => {
+      localStorage.removeItem('sadhana_token');
+      setUser(null);
+    });
+    return () => setUnauthorizedHandler(null);
+  }, []);
+
+  useEffect(() => {
     const token = localStorage.getItem('sadhana_token');
     if (token) {
       api.getMe()
         .then(data => setUser(data.user))
-        .catch(() => localStorage.removeItem('sadhana_token'))
+        .catch(() => {
+          localStorage.removeItem('sadhana_token');
+          setUser(null);
+        })
         .finally(() => setLoading(false));
     } else {
       setLoading(false);
@@ -38,8 +49,14 @@ export function AuthProvider({ children }) {
     setUser(null);
   }, []);
 
+  const acceptCommitment = useCallback(async () => {
+    const data = await api.acceptCommitment();
+    setUser(data.user);
+    return data.user;
+  }, []);
+
   return (
-    <AuthContext.Provider value={{ user, loading, login, register, logout }}>
+    <AuthContext.Provider value={{ user, loading, login, register, logout, acceptCommitment }}>
       {children}
     </AuthContext.Provider>
   );

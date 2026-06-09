@@ -59,7 +59,7 @@ export default function SanghaNudgePanel({ userId }) {
     try {
       await api.nudgeFriend(friendId);
       setNudgedIds(prev => new Set([...prev, friendId]));
-      setMessage('Nudge sent!');
+      setMessage('Nudge sent — they\'ll see it on their Today screen!');
     } catch (err) {
       setError(err.message);
     } finally {

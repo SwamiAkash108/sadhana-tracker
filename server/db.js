@@ -87,6 +87,38 @@ async function initSchema() {
       FOREIGN KEY (to_user_id) REFERENCES users(id),
       UNIQUE(from_user_id, to_user_id, date)
     )`,
+    `CREATE TABLE IF NOT EXISTS day_snapshots (
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      snapshot TEXT NOT NULL,
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, date),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS sangha_groups (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      sort_order INTEGER DEFAULT 0,
+      created_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
+    `CREATE TABLE IF NOT EXISTS sangha_group_members (
+      group_id TEXT NOT NULL,
+      user_id TEXT NOT NULL,
+      PRIMARY KEY (group_id, user_id),
+      FOREIGN KEY (group_id) REFERENCES sangha_groups(id),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
+    `CREATE INDEX IF NOT EXISTS idx_sangha_groups_user ON sangha_groups(user_id)`,
+    `CREATE TABLE IF NOT EXISTS user_custom_labels (
+      user_id TEXT NOT NULL,
+      item_id TEXT NOT NULL,
+      label TEXT NOT NULL DEFAULT 'Custom',
+      PRIMARY KEY (user_id, item_id),
+      FOREIGN KEY (user_id) REFERENCES users(id),
+      FOREIGN KEY (item_id) REFERENCES sadhana_items(id)
+    )`,
   ];
 
   for (const sql of ddl) {
@@ -115,6 +147,8 @@ async function initSchema() {
       { name: 'Water', description: 'Hydration — 2 litres', emoji: '💧', sort_order: 16, category: 'quick', type: 'toggle' },
       { name: 'Study', description: 'Scriptural study & reflection', emoji: '📖', sort_order: 17, category: 'quick', type: 'toggle' },
       { name: 'Abhishekam', description: 'Sacred bathing ritual', emoji: '🪷', sort_order: 18, category: 'quick', type: 'toggle' },
+      { name: 'Music', description: 'Kirtan & devotional music', emoji: '🎵', sort_order: 19, category: 'quick', type: 'toggle' },
+      { name: 'Morning Mantras', description: 'Morning mantra practice', emoji: '🌅', sort_order: 20, category: 'quick', type: 'toggle' },
     ];
 
     const stmts = defaults.map(item => ({
@@ -125,6 +159,59 @@ async function initSchema() {
   }
 
   await migrateKriyaLevels(client);
+  await migrateQuickItems(client);
+  await migrateCommitment(client);
+  await migrateCustomItems(client);
+}
+
+async function migrateCommitment(client) {
+  try {
+    await client.execute('ALTER TABLE users ADD COLUMN commitment_accepted_at TEXT');
+  } catch {
+    // column already exists
+  }
+}
+
+async function migrateCustomItems(client) {
+  const specs = [
+    { name: 'Custom 1', description: 'Your personal practice', emoji: '✨', sort_order: 21 },
+    { name: 'Custom 2', description: 'Your personal practice', emoji: '✨', sort_order: 22 },
+  ];
+
+  for (const spec of specs) {
+    const existing = await client.execute({
+      sql: 'SELECT id FROM sadhana_items WHERE lower(name) = lower(?)',
+      args: [spec.name],
+    });
+
+    if (existing.rows.length === 0) {
+      await client.execute({
+        sql: 'INSERT INTO sadhana_items (id, name, description, emoji, sort_order, category, item_type, target, am_pm, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [uuidv4(), spec.name, spec.description, spec.emoji, spec.sort_order, 'custom', 'toggle', 0, 0, 1],
+      });
+    }
+  }
+}
+
+async function migrateQuickItems(client) {
+  const specs = [
+    { name: 'Music', description: 'Kirtan & devotional music', emoji: '🎵', sort_order: 19 },
+    { name: 'Morning Mantras', description: 'Morning mantra practice', emoji: '🌅', sort_order: 20 },
+  ];
+
+  for (const spec of specs) {
+    const existing = await client.execute({
+      sql: 'SELECT id FROM sadhana_items WHERE lower(name) = lower(?)',
+      args: [spec.name],
+    });
+
+    if (existing.rows.length === 0) {
+      await client.execute({
+        sql: 'INSERT INTO sadhana_items (id, name, description, emoji, sort_order, category, item_type, target, am_pm, active) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)',
+        args: [uuidv4(), spec.name, spec.description, spec.emoji, spec.sort_order, 'quick', 'toggle', 0, 0, 1],
+      });
+    }
+  }
 }
 
 async function migrateKriyaLevels(client) {

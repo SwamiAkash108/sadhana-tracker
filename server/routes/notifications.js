@@ -44,6 +44,55 @@ router.post('/unsubscribe', authMiddleware, async (req, res) => {
   }
 });
 
+router.post('/test', authMiddleware, async (req, res) => {
+  try {
+    if (!VAPID_PUBLIC || !VAPID_PRIVATE) {
+      return res.status(503).json({ error: 'Push notifications not configured on server.' });
+    }
+
+    const db = getDb();
+    const result = await db.execute(
+      'SELECT id, subscription FROM push_subscriptions WHERE user_id = ?',
+      [req.userId]
+    );
+
+    if (result.rows.length === 0) {
+      return res.status(400).json({ error: 'Enable notifications on this device first.' });
+    }
+
+    const payload = JSON.stringify({
+      title: '🙏 Sadhana Tracker',
+      body: 'Push notifications are working! You\'ll get Sangha nudges here.',
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-72.png',
+      data: { url: '/' },
+      vibrate: [200, 100, 200],
+      tag: 'sadhana-test',
+      requireInteraction: false,
+    });
+
+    let sent = false;
+    await Promise.all(result.rows.map(sub =>
+      webpush.sendNotification(JSON.parse(sub.subscription), payload)
+        .then(() => { sent = true; })
+        .catch(async err => {
+          if (err.statusCode === 410 || err.statusCode === 404) {
+            await db.execute('DELETE FROM push_subscriptions WHERE id = ?', [sub.id]);
+          }
+        })
+    ));
+
+    if (!sent) {
+      return res.status(500).json({ error: 'Could not deliver test notification.' });
+    }
+
+    res.json({ ok: true });
+  } catch (err) {
+    console.error('Test push error:', err);
+    res.status(500).json({ error: 'Failed to send test notification.' });
+  }
+});
+
 router.post('/send-reminder', authMiddleware, async (req, res) => {
   try {
     if (!VAPID_PUBLIC || !VAPID_PRIVATE) return res.status(503).json({ error: 'Push notifications not configured.' });

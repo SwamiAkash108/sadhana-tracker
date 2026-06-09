@@ -26,7 +26,7 @@ router.post('/register', async (req, res) => {
     const passwordHash = bcrypt.hashSync(password, 10);
     await db.execute('INSERT INTO users (id, name, email, password_hash) VALUES (?, ?, ?, ?)', [id, name, email, passwordHash]);
     const token = jwt.sign({ userId: id, name, email }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-    res.json({ token, user: { id, name, email } });
+    res.json({ token, user: { id, name, email, commitmentAccepted: false } });
   } catch (err) {
     console.error('Register error:', err);
     res.status(500).json({ error: 'Registration failed.' });
@@ -40,13 +40,24 @@ router.post('/login', async (req, res) => {
       return res.status(400).json({ error: 'Email and password are required.' });
     }
     const db = getDb();
-    const result = await db.execute('SELECT id, name, email, password_hash FROM users WHERE email = ?', [email]);
+    const result = await db.execute(
+      'SELECT id, name, email, password_hash, commitment_accepted_at FROM users WHERE email = ?',
+      [email]
+    );
     const user = result.rows[0];
     if (!user || !bcrypt.compareSync(password, user.password_hash)) {
       return res.status(401).json({ error: 'Invalid email or password.' });
     }
     const token = jwt.sign({ userId: user.id, name: user.name, email: user.email }, JWT_SECRET, { expiresIn: JWT_EXPIRY });
-    res.json({ token, user: { id: user.id, name: user.name, email: user.email } });
+    res.json({
+      token,
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        commitmentAccepted: !!user.commitment_accepted_at,
+      },
+    });
   } catch (err) {
     console.error('Login error:', err);
     res.status(500).json({ error: 'Login failed.' });
@@ -56,13 +67,50 @@ router.post('/login', async (req, res) => {
 router.get('/me', authMiddleware, async (req, res) => {
   try {
     const db = getDb();
-    const result = await db.execute('SELECT id, name, email FROM users WHERE id = ?', [req.userId]);
+    const result = await db.execute(
+      'SELECT id, name, email, commitment_accepted_at FROM users WHERE id = ?',
+      [req.userId]
+    );
     const user = result.rows[0];
     if (!user) return res.status(404).json({ error: 'User not found.' });
-    res.json({ user });
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        commitmentAccepted: !!user.commitment_accepted_at,
+      },
+    });
   } catch (err) {
     console.error('Me error:', err);
     res.status(500).json({ error: 'Failed to fetch user.' });
+  }
+});
+
+router.post('/commitment', authMiddleware, async (req, res) => {
+  try {
+    const db = getDb();
+    await db.execute(
+      "UPDATE users SET commitment_accepted_at = datetime('now') WHERE id = ? AND commitment_accepted_at IS NULL",
+      [req.userId]
+    );
+    const result = await db.execute(
+      'SELECT id, name, email, commitment_accepted_at FROM users WHERE id = ?',
+      [req.userId]
+    );
+    const user = result.rows[0];
+    if (!user) return res.status(404).json({ error: 'User not found.' });
+    res.json({
+      user: {
+        id: user.id,
+        name: user.name,
+        email: user.email,
+        commitmentAccepted: !!user.commitment_accepted_at,
+      },
+    });
+  } catch (err) {
+    console.error('Commitment error:', err);
+    res.status(500).json({ error: 'Failed to save commitment.' });
   }
 });
 

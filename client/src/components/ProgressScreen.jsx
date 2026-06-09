@@ -1,35 +1,78 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useMemo } from 'react';
 import { api } from '../api';
+import { buildDayRecord, formatRecordDate } from '../utils/dayRecord';
+import { buildHistoryFromSources } from '../utils/daySnapshot';
+import { getSadhanaDate, getMonthBounds } from '../utils/sadhanaDate';
+import {
+  buildStatusByDate,
+  computeCurrentStreak,
+  computeLongestStreak,
+  getMonthDayStatuses,
+} from '../utils/streakHistory';
+import { DayHistoryCard } from './DayHistoryPanel';
+import SessionErrorPanel from './SessionErrorPanel';
 
-export default function ProgressScreen({ user }) {
-  const [stats, setStats] = useState(null);
-  const [monthData, setMonthData] = useState(null);
+export default function ProgressScreen() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
+  const [currentStreak, setCurrentStreak] = useState(0);
+  const [longestStreak, setLongestStreak] = useState(0);
+  const [longestStreakEndDate, setLongestStreakEndDate] = useState('');
+  const [monthDays, setMonthDays] = useState([]);
+  const [history, setHistory] = useState([]);
+  const [selectedDate, setSelectedDate] = useState(null);
+  const [items, setItems] = useState([]);
+  const [progressByDate, setProgressByDate] = useState({});
 
   const now = new Date();
   const year = now.getFullYear();
   const month = now.getMonth() + 1;
   const monthName = now.toLocaleDateString('en-US', { month: 'long' });
+  const sadhanaToday = getSadhanaDate();
 
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [statsData, monthStats] = await Promise.all([
-        api.getStats(30),
-        api.getMonthStats(year, month),
+      const [{ items: itemList }, { progress }, { snapshots }] = await Promise.all([
+        api.getItems(),
+        api.getProgressRange(),
+        api.getDaySnapshots(),
       ]);
-      setStats(statsData);
-      setMonthData(monthStats);
+
+      const statusByDate = buildStatusByDate(itemList, progress);
+      const streak = computeCurrentStreak(statusByDate, sadhanaToday);
+      const { longest, endDate } = computeLongestStreak(statusByDate, sadhanaToday);
+      const dayHistory = buildHistoryFromSources(itemList, progress, snapshots);
+
+      setItems(itemList);
+      setProgressByDate(progress);
+      setCurrentStreak(streak);
+      setLongestStreak(longest);
+      setLongestStreakEndDate(endDate);
+      setMonthDays(getMonthDayStatuses(statusByDate, year, month));
+      setHistory(dayHistory);
+      setSelectedDate(prev => prev || sadhanaToday);
       setError('');
     } catch (err) {
       setError(err.message);
     } finally {
       setLoading(false);
     }
-  }, [year, month]);
+  }, [year, month, sadhanaToday]);
 
   useEffect(() => { fetchData(); }, [fetchData]);
+
+  const selectedRecord = useMemo(() => {
+    if (!selectedDate) return null;
+    const fromHistory = history.find(r => r.date === selectedDate);
+    if (fromHistory) return fromHistory;
+    if (items.length === 0) return null;
+    return buildDayRecord({
+      items,
+      date: selectedDate,
+      completedIds: progressByDate[selectedDate] || [],
+    });
+  }, [selectedDate, history, items, progressByDate]);
 
   if (loading) {
     return (
@@ -40,32 +83,24 @@ export default function ProgressScreen({ user }) {
   }
 
   if (error) {
-    return (
-      <div className="bg-surface border-4 border-primary woodcut-shadow p-8 text-center">
-        <p className="font-body-md text-body-md text-secondary mb-4">{error}</p>
-        <button onClick={fetchData} className="btn-woodcut px-6 py-3">Retry</button>
-      </div>
-    );
+    return <SessionErrorPanel error={error} onRetry={fetchData} />;
   }
 
-  if (!stats || !monthData) return null;
-
-  const currentStreak = stats.streak || 0;
-  const longestStreak = stats.longestStreak || 0;
-  const longestEnd = stats.longestStreakEndDate
-    ? new Date(stats.longestStreakEndDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
+  const dayMap = Object.fromEntries(monthDays.map(day => [day.date, day]));
+  const longestEnd = longestStreakEndDate
+    ? new Date(longestStreakEndDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : '';
 
-  const dayMap = {};
-  (monthData.dailyData || []).forEach(day => { dayMap[day.date] = day; });
-
-  const firstOfMonth = new Date(year, month - 1, 1);
-  const daysInMonth = new Date(year, month, 0).getDate();
-  const monthDates = Array.from({ length: daysInMonth }, (_, i) => new Date(year, month - 1, i + 1));
+  const { start: monthStart, daysInMonth } = getMonthBounds(year, month);
+  const firstWeekday = new Date(`${monthStart}T12:00:00`).getDay();
+  const monthDateStrings = Array.from({ length: daysInMonth }, (_, i) => {
+    const d = i + 1;
+    return `${year}-${String(month).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+  });
 
   return (
-    <div>
-      <div className="mb-12 border-b-4 border-primary pb-6 relative">
+    <div className="space-y-10">
+      <div className="border-b-4 border-primary pb-6 relative">
         <div className="absolute inset-0 halftone-bg opacity-10 -z-10" />
         <h2 className="font-headline-xl text-headline-xl text-primary mb-2">Progress</h2>
         <p className="font-label-sm text-label-sm text-on-surface-variant uppercase tracking-widest bg-black text-white inline-block px-3 py-1">
@@ -89,7 +124,9 @@ export default function ProgressScreen({ user }) {
                 <div key={i} className={`h-2 flex-1 ${i < Math.min(5, Math.ceil(currentStreak / 7)) ? 'bg-primary' : 'bg-surface-variant'}`} />
               ))}
             </div>
-            <p className="font-label-sm text-label-sm text-on-surface-variant mt-3 opacity-70">Keep the fire burning.</p>
+            <p className="font-label-sm text-label-sm text-on-surface-variant mt-3 opacity-70">
+              Partial or full practice counts.
+            </p>
           </div>
 
           <div className="bg-surface-bright thin-border woodcut-shadow p-6 relative">
@@ -108,57 +145,73 @@ export default function ProgressScreen({ user }) {
         </div>
 
         <div className="col-span-12 md:col-span-8">
-          <div className="bg-surface stark-border woodcut-shadow p-8 h-full flex flex-col">
+          <div className="bg-surface stark-border woodcut-shadow p-8 flex flex-col">
             <div className="flex flex-col md:flex-row md:justify-between md:items-end mb-8 border-b-4 border-primary pb-4 gap-3">
               <h3 className="font-headline-md text-headline-md text-primary tracking-tight">{monthName} Consistency</h3>
               <div className="flex flex-wrap items-center gap-3 font-label-sm text-label-sm md:justify-end">
-                <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 bg-primary" /> Done</div>
-                <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 bg-secondary" /> Part</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 bg-[#15803d]" /> Full</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 bg-[#ea580c]" /> Partial</div>
                 <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 border border-primary bg-surface" /> Miss</div>
               </div>
             </div>
 
-            <div className="grid grid-cols-7 gap-2 mb-6 flex-1">
+            <div className="grid grid-cols-7 gap-2 mb-6">
               {['S', 'M', 'T', 'W', 'T', 'F', 'S'].map((d, i) => (
                 <div key={`${d}-${i}`} className="text-center font-label-sm text-label-sm uppercase text-on-surface-variant py-2">{d}</div>
               ))}
-              {Array.from({ length: firstOfMonth.getDay() }).map((_, i) => (
+              {Array.from({ length: firstWeekday }).map((_, i) => (
                 <div key={`empty-${i}`} className="aspect-square" />
               ))}
-              {monthDates.map(d => {
-                const ds = d.toISOString().split('T')[0];
+              {monthDateStrings.map(ds => {
+                const dayNum = Number(ds.split('-')[2]);
                 const day = dayMap[ds];
-                const pct = day ? day.percentage : 0;
-                const isToday = d.toDateString() === new Date().toDateString();
-                const isFuture = d > new Date();
+                const status = day?.status || 'none';
+                const isToday = ds === sadhanaToday;
+                const isFuture = ds > sadhanaToday;
+                const isSelected = ds === selectedDate;
 
                 let cellClass = 'bg-surface thin-border flex items-center justify-center text-primary';
-                if (day && pct >= 100) cellClass = 'bg-primary thin-border flex items-center justify-center text-white';
-                else if (day && pct >= 50) cellClass = 'bg-secondary thin-border flex items-center justify-center text-white';
-                else if (day && pct > 0) cellClass = 'bg-surface thin-border flex items-center justify-center text-primary';
+                if (status === 'green') cellClass = 'bg-[#15803d] thin-border flex items-center justify-center text-white';
+                else if (status === 'orange') cellClass = 'bg-[#ea580c] thin-border flex items-center justify-center text-white';
                 if (isFuture) cellClass += ' opacity-50';
+                if (isSelected) cellClass += ' ring-2 ring-black ring-offset-1';
 
                 return (
-                  <div
+                  <button
                     key={ds}
-                    className={`aspect-square ${cellClass} font-label-sm text-label-sm hover:scale-105 transition-transform cursor-default relative group`}
-                    title={day ? `${day.completed}/${day.total} (${pct}%)` : 'No data'}
+                    type="button"
+                    disabled={isFuture}
+                    onClick={() => setSelectedDate(ds)}
+                    className={`aspect-square ${cellClass} font-label-sm text-label-sm hover:scale-105 transition-transform relative group disabled:cursor-default disabled:hover:scale-100`}
+                    title="View this day's practice"
                   >
-                    {d.getDate()}
-                    {day && pct >= 50 && pct < 100 && (
+                    {dayNum}
+                    {status === 'orange' && (
                       <div className="absolute inset-0 halftone-bg opacity-30 mix-blend-overlay pointer-events-none" />
                     )}
                     {isToday && (
                       <div className="absolute -bottom-1 -right-1 w-3 h-3 bg-secondary border border-black rounded-full animate-pulse" />
                     )}
-                    {day && (
-                      <div className="absolute -top-10 left-1/2 -translate-x-1/2 bg-black text-white px-2 py-1 text-[10px] hidden group-hover:block whitespace-nowrap z-10">
-                        {day.completed}/{day.total} ({pct}%)
-                      </div>
-                    )}
-                  </div>
+                  </button>
                 );
               })}
+            </div>
+
+            <div className="border-t-4 border-primary pt-6">
+              <h3 className="font-headline-sm text-headline-sm uppercase mb-4">
+                {selectedDate ? formatRecordDate(selectedDate) : 'Select a day'}
+              </h3>
+              {selectedRecord?.hasActivity ? (
+                <DayHistoryCard record={selectedRecord} hideHeader />
+              ) : (
+                <div className="border-2 border-primary bg-surface-bright p-8 text-center">
+                  <p className="font-body-md text-body-md text-on-surface-variant">
+                    {selectedDate
+                      ? 'Nothing logged for this day yet.'
+                      : 'Tap a date on the calendar above.'}
+                  </p>
+                </div>
+              )}
             </div>
           </div>
         </div>
