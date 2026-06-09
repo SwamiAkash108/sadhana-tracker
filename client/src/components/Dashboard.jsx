@@ -26,8 +26,13 @@ export default function Dashboard() {
 
   const refreshFriendRequests = useCallback(async () => {
     try {
-      const data = await api.getFriendRequests();
-      setIncomingRequestCount(data.incoming?.length || 0);
+      const [friendData, groupData] = await Promise.all([
+        api.getFriendRequests(),
+        api.getGroupInvitations(),
+      ]);
+      const friendCount = friendData.incoming?.length || 0;
+      const groupCount = groupData.incoming?.length || 0;
+      setIncomingRequestCount(friendCount + groupCount);
     } catch {
       setIncomingRequestCount(0);
     }

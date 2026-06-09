@@ -760,6 +760,12 @@ router.post('/friends/remove', async (req, res) => {
        WHERE user_id = ? AND group_id IN (SELECT id FROM sangha_groups WHERE user_id = ?)`,
       [friendId, req.userId]
     );
+    await db.execute(
+      `UPDATE sangha_group_invites SET status = 'declined', updated_at = datetime('now')
+       WHERE invitee_id = ? AND status = 'pending'
+       AND group_id IN (SELECT id FROM sangha_groups WHERE user_id = ?)`,
+      [friendId, req.userId]
+    );
 
     res.json({ status: 'removed' });
   } catch (err) {
@@ -768,19 +774,50 @@ router.post('/friends/remove', async (req, res) => {
   }
 });
 
-async function getOwnedGroup(db, groupId, userId) {
+async function getGroupById(db, groupId) {
   const result = await db.execute(
-    'SELECT id, name, sort_order FROM sangha_groups WHERE id = ? AND user_id = ?',
-    [groupId, userId]
+    'SELECT id, name, sort_order, user_id as admin_id FROM sangha_groups WHERE id = ?',
+    [groupId]
   );
   return result.rows[0] || null;
 }
 
-async function assertGroupMemberAllowed(db, ownerId, memberId) {
-  if (memberId === ownerId) return;
-  const friendIds = await getFriendIds(db, ownerId);
-  if (!friendIds.includes(memberId)) {
-    const err = new Error('Can only add Sangha members to a group.');
+async function isGroupAdmin(db, groupId, userId) {
+  const group = await getGroupById(db, groupId);
+  return group?.admin_id === userId;
+}
+
+async function isGroupMember(db, groupId, userId) {
+  const group = await getGroupById(db, groupId);
+  if (!group) return false;
+  if (group.admin_id === userId) return true;
+  const result = await db.execute(
+    'SELECT 1 FROM sangha_group_members WHERE group_id = ? AND user_id = ?',
+    [groupId, userId]
+  );
+  return result.rows.length > 0;
+}
+
+async function getGroupCoMemberIds(db, userId) {
+  const result = await db.execute(
+    `SELECT DISTINCT sgm2.user_id
+     FROM sangha_group_members sgm1
+     JOIN sangha_group_members sgm2 ON sgm1.group_id = sgm2.group_id
+     WHERE sgm1.user_id = ? AND sgm2.user_id != ?`,
+    [userId, userId]
+  );
+  return result.rows.map(row => row.user_id);
+}
+
+async function assertGroupInviteAllowed(db, adminId, inviteeId) {
+  if (inviteeId === adminId) {
+    const err = new Error('You are already in this sangha.');
+    err.status = 400;
+    throw err;
+  }
+  const friendIds = await getFriendIds(db, adminId);
+  if (!friendIds.includes(inviteeId)) {
+    const err = new Error('Can only invite people in your sangha.');
     err.status = 400;
     throw err;
   }
@@ -788,16 +825,26 @@ async function assertGroupMemberAllowed(db, ownerId, memberId) {
 
 async function fetchGroupsForUser(db, userId) {
   const groupsResult = await db.execute(
-    'SELECT id, name, sort_order FROM sangha_groups WHERE user_id = ? ORDER BY sort_order ASC, name ASC',
-    [userId]
+    `SELECT DISTINCT g.id, g.name, g.sort_order, g.user_id as admin_id
+     FROM sangha_groups g
+     LEFT JOIN sangha_group_members m ON m.group_id = g.id
+     WHERE g.user_id = ? OR m.user_id = ?
+     ORDER BY g.sort_order ASC, g.name ASC`,
+    [userId, userId]
   );
   const groups = groupsResult.rows;
   if (groups.length === 0) return [];
 
   const groupIds = groups.map(g => g.id);
   const placeholders = groupIds.map(() => '?').join(', ');
+
   const membersResult = await db.execute(
     `SELECT group_id, user_id FROM sangha_group_members WHERE group_id IN (${placeholders})`,
+    groupIds
+  );
+  const pendingResult = await db.execute(
+    `SELECT id, group_id, invitee_id FROM sangha_group_invites
+     WHERE group_id IN (${placeholders}) AND status = 'pending'`,
     groupIds
   );
 
@@ -806,12 +853,23 @@ async function fetchGroupsForUser(db, userId) {
     membersByGroup[row.group_id].push(row.user_id);
   }
 
-  return groups.map(g => ({
-    id: g.id,
-    name: g.name,
-    sort_order: g.sort_order,
-    member_ids: membersByGroup[g.id] || [],
-  }));
+  const pendingByGroup = Object.fromEntries(groupIds.map(id => [id, []]));
+  for (const row of pendingResult.rows) {
+    pendingByGroup[row.group_id].push({ id: row.id, user_id: row.invitee_id });
+  }
+
+  return groups.map(g => {
+    const memberIds = [...new Set([g.admin_id, ...(membersByGroup[g.id] || [])])];
+    return {
+      id: g.id,
+      name: g.name,
+      sort_order: g.sort_order,
+      admin_id: g.admin_id,
+      is_admin: g.admin_id === userId,
+      member_ids: memberIds,
+      pending_invites: g.admin_id === userId ? (pendingByGroup[g.id] || []) : [],
+    };
+  });
 }
 
 // GET /api/sadhana/groups
@@ -823,6 +881,42 @@ router.get('/groups', async (req, res) => {
   } catch (err) {
     console.error('Groups list error:', err);
     res.status(500).json({ error: 'Failed to fetch groups.' });
+  }
+});
+
+// GET /api/sadhana/groups/invitations
+router.get('/groups/invitations', async (req, res) => {
+  try {
+    const db = getDb();
+    const incomingResult = await db.execute(
+      `SELECT gi.id, gi.group_id, gi.inviter_id, gi.created_at,
+              g.name as group_name, u.name as inviter_name
+       FROM sangha_group_invites gi
+       JOIN sangha_groups g ON g.id = gi.group_id
+       JOIN users u ON u.id = gi.inviter_id
+       WHERE gi.invitee_id = ? AND gi.status = 'pending'
+       ORDER BY gi.created_at DESC`,
+      [req.userId]
+    );
+
+    const outgoingResult = await db.execute(
+      `SELECT gi.id, gi.group_id, gi.invitee_id, gi.created_at,
+              g.name as group_name, u.name as invitee_name
+       FROM sangha_group_invites gi
+       JOIN sangha_groups g ON g.id = gi.group_id
+       JOIN users u ON u.id = gi.invitee_id
+       WHERE gi.inviter_id = ? AND gi.status = 'pending'
+       ORDER BY gi.created_at DESC`,
+      [req.userId]
+    );
+
+    res.json({
+      incoming: incomingResult.rows,
+      outgoing: outgoingResult.rows,
+    });
+  } catch (err) {
+    console.error('Group invitations error:', err);
+    res.status(500).json({ error: 'Failed to fetch group invitations.' });
   }
 });
 
@@ -845,8 +939,13 @@ router.post('/groups', async (req, res) => {
       'INSERT INTO sangha_groups (id, user_id, name, sort_order) VALUES (?, ?, ?, ?)',
       [id, req.userId, name, sortOrder]
     );
+    await db.execute(
+      'INSERT OR IGNORE INTO sangha_group_members (group_id, user_id) VALUES (?, ?)',
+      [id, req.userId]
+    );
 
-    res.json({ group: { id, name, sort_order: sortOrder, member_ids: [] } });
+    const groups = await fetchGroupsForUser(db, req.userId);
+    res.json({ group: groups.find(g => g.id === id) });
   } catch (err) {
     console.error('Group create error:', err);
     res.status(500).json({ error: 'Failed to create group.' });
@@ -857,16 +956,17 @@ router.post('/groups', async (req, res) => {
 router.patch('/groups/:id', async (req, res) => {
   try {
     const db = getDb();
-    const group = await getOwnedGroup(db, req.params.id, req.userId);
-    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (!await isGroupAdmin(db, req.params.id, req.userId)) {
+      return res.status(403).json({ error: 'Only the sangha admin can rename this group.' });
+    }
 
     const name = (req.body.name || '').trim();
     if (!name) return res.status(400).json({ error: 'Group name is required.' });
     if (name.length > 40) return res.status(400).json({ error: 'Group name is too long.' });
 
-    await db.execute('UPDATE sangha_groups SET name = ? WHERE id = ?', [name, group.id]);
+    await db.execute('UPDATE sangha_groups SET name = ? WHERE id = ?', [name, req.params.id]);
     const groups = await fetchGroupsForUser(db, req.userId);
-    res.json({ group: groups.find(g => g.id === group.id) });
+    res.json({ group: groups.find(g => g.id === req.params.id) });
   } catch (err) {
     console.error('Group update error:', err);
     res.status(500).json({ error: 'Failed to update group.' });
@@ -877,11 +977,13 @@ router.patch('/groups/:id', async (req, res) => {
 router.delete('/groups/:id', async (req, res) => {
   try {
     const db = getDb();
-    const group = await getOwnedGroup(db, req.params.id, req.userId);
-    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    if (!await isGroupAdmin(db, req.params.id, req.userId)) {
+      return res.status(403).json({ error: 'Only the sangha admin can delete this group.' });
+    }
 
-    await db.execute('DELETE FROM sangha_group_members WHERE group_id = ?', [group.id]);
-    await db.execute('DELETE FROM sangha_groups WHERE id = ?', [group.id]);
+    await db.execute('DELETE FROM sangha_group_invites WHERE group_id = ?', [req.params.id]);
+    await db.execute('DELETE FROM sangha_group_members WHERE group_id = ?', [req.params.id]);
+    await db.execute('DELETE FROM sangha_groups WHERE id = ?', [req.params.id]);
     res.json({ status: 'deleted' });
   } catch (err) {
     console.error('Group delete error:', err);
@@ -889,31 +991,103 @@ router.delete('/groups/:id', async (req, res) => {
   }
 });
 
-// POST /api/sadhana/groups/:id/members { user_id }
-router.post('/groups/:id/members', async (req, res) => {
+// POST /api/sadhana/groups/:id/invite { user_id }
+router.post('/groups/:id/invite', async (req, res) => {
   try {
     const db = getDb();
-    const group = await getOwnedGroup(db, req.params.id, req.userId);
-    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    const groupId = req.params.id;
+    if (!await isGroupAdmin(db, groupId, req.userId)) {
+      return res.status(403).json({ error: 'Only the sangha admin can invite members.' });
+    }
 
-    const memberId = req.body.user_id;
-    if (!memberId) return res.status(400).json({ error: 'user_id is required.' });
+    const inviteeId = req.body.user_id;
+    if (!inviteeId) return res.status(400).json({ error: 'user_id is required.' });
 
-    await assertGroupMemberAllowed(db, req.userId, memberId);
+    await assertGroupInviteAllowed(db, req.userId, inviteeId);
 
-    const userResult = await db.execute('SELECT id FROM users WHERE id = ?', [memberId]);
-    if (!userResult.rows[0]) return res.status(404).json({ error: 'User not found.' });
+    if (await isGroupMember(db, groupId, inviteeId)) {
+      return res.status(409).json({ error: 'Already in this sangha.' });
+    }
 
+    const pending = await db.execute(
+      `SELECT id FROM sangha_group_invites
+       WHERE group_id = ? AND invitee_id = ? AND status = 'pending'`,
+      [groupId, inviteeId]
+    );
+    if (pending.rows[0]) {
+      return res.status(409).json({ error: 'Invitation already sent.' });
+    }
+
+    const inviteId = uuidv4();
     await db.execute(
-      'INSERT OR IGNORE INTO sangha_group_members (group_id, user_id) VALUES (?, ?)',
-      [group.id, memberId]
+      `INSERT INTO sangha_group_invites (id, group_id, inviter_id, invitee_id, status)
+       VALUES (?, ?, ?, ?, 'pending')`,
+      [inviteId, groupId, req.userId, inviteeId]
     );
 
     const groups = await fetchGroupsForUser(db, req.userId);
-    res.json({ group: groups.find(g => g.id === group.id) });
+    res.json({ group: groups.find(g => g.id === groupId), invitation_id: inviteId });
   } catch (err) {
-    console.error('Group add member error:', err);
-    res.status(err.status || 500).json({ error: err.message || 'Failed to add member.' });
+    console.error('Group invite error:', err);
+    res.status(err.status || 500).json({ error: err.message || 'Failed to send invitation.' });
+  }
+});
+
+// POST /api/sadhana/groups/invitations/accept { invitation_id }
+router.post('/groups/invitations/accept', async (req, res) => {
+  try {
+    const db = getDb();
+    const invitationId = req.body.invitation_id;
+    if (!invitationId) return res.status(400).json({ error: 'invitation_id is required.' });
+
+    const result = await db.execute(
+      `SELECT id, group_id, invitee_id FROM sangha_group_invites
+       WHERE id = ? AND invitee_id = ? AND status = 'pending'`,
+      [invitationId, req.userId]
+    );
+    const invite = result.rows[0];
+    if (!invite) return res.status(404).json({ error: 'Invitation not found.' });
+
+    await db.execute(
+      'INSERT OR IGNORE INTO sangha_group_members (group_id, user_id) VALUES (?, ?)',
+      [invite.group_id, req.userId]
+    );
+    await db.execute(
+      `UPDATE sangha_group_invites SET status = 'accepted', updated_at = datetime('now') WHERE id = ?`,
+      [invitationId]
+    );
+
+    const groups = await fetchGroupsForUser(db, req.userId);
+    res.json({ status: 'accepted', groups });
+  } catch (err) {
+    console.error('Group accept error:', err);
+    res.status(500).json({ error: 'Failed to accept invitation.' });
+  }
+});
+
+// POST /api/sadhana/groups/invitations/decline { invitation_id }
+router.post('/groups/invitations/decline', async (req, res) => {
+  try {
+    const db = getDb();
+    const invitationId = req.body.invitation_id;
+    if (!invitationId) return res.status(400).json({ error: 'invitation_id is required.' });
+
+    const result = await db.execute(
+      `SELECT id FROM sangha_group_invites
+       WHERE id = ? AND invitee_id = ? AND status = 'pending'`,
+      [invitationId, req.userId]
+    );
+    if (!result.rows[0]) return res.status(404).json({ error: 'Invitation not found.' });
+
+    await db.execute(
+      `UPDATE sangha_group_invites SET status = 'declined', updated_at = datetime('now') WHERE id = ?`,
+      [invitationId]
+    );
+
+    res.json({ status: 'declined' });
+  } catch (err) {
+    console.error('Group decline error:', err);
+    res.status(500).json({ error: 'Failed to decline invitation.' });
   }
 });
 
@@ -921,16 +1095,25 @@ router.post('/groups/:id/members', async (req, res) => {
 router.delete('/groups/:id/members/:userId', async (req, res) => {
   try {
     const db = getDb();
-    const group = await getOwnedGroup(db, req.params.id, req.userId);
-    if (!group) return res.status(404).json({ error: 'Group not found.' });
+    const groupId = req.params.id;
+    const memberId = req.params.userId;
+
+    if (!await isGroupAdmin(db, groupId, req.userId)) {
+      return res.status(403).json({ error: 'Only the sangha admin can remove members.' });
+    }
+
+    const group = await getGroupById(db, groupId);
+    if (memberId === group.admin_id) {
+      return res.status(400).json({ error: 'The admin cannot be removed from the sangha.' });
+    }
 
     await db.execute(
       'DELETE FROM sangha_group_members WHERE group_id = ? AND user_id = ?',
-      [group.id, req.params.userId]
+      [groupId, memberId]
     );
 
     const groups = await fetchGroupsForUser(db, req.userId);
-    res.json({ group: groups.find(g => g.id === group.id) });
+    res.json({ group: groups.find(g => g.id === groupId) });
   } catch (err) {
     console.error('Group remove member error:', err);
     res.status(500).json({ error: 'Failed to remove member.' });
@@ -948,7 +1131,8 @@ router.get('/team', async (req, res) => {
     const totalItems = items.length;
 
     const friendIds = await getFriendIds(db, req.userId);
-    const memberIds = [req.userId, ...friendIds];
+    const groupCoMemberIds = await getGroupCoMemberIds(db, req.userId);
+    const memberIds = [...new Set([req.userId, ...friendIds, ...groupCoMemberIds])];
     const placeholders = memberIds.map(() => '?').join(', ');
 
     const usersResult = await db.execute(

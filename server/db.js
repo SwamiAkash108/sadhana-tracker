@@ -110,7 +110,21 @@ async function initSchema() {
       FOREIGN KEY (group_id) REFERENCES sangha_groups(id),
       FOREIGN KEY (user_id) REFERENCES users(id)
     )`,
+    `CREATE TABLE IF NOT EXISTS sangha_group_invites (
+      id TEXT PRIMARY KEY,
+      group_id TEXT NOT NULL,
+      inviter_id TEXT NOT NULL,
+      invitee_id TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (group_id) REFERENCES sangha_groups(id),
+      FOREIGN KEY (inviter_id) REFERENCES users(id),
+      FOREIGN KEY (invitee_id) REFERENCES users(id),
+      UNIQUE(group_id, invitee_id)
+    )`,
     `CREATE INDEX IF NOT EXISTS idx_sangha_groups_user ON sangha_groups(user_id)`,
+    `CREATE INDEX IF NOT EXISTS idx_sangha_group_invites_invitee ON sangha_group_invites(invitee_id, status)`,
     `CREATE TABLE IF NOT EXISTS user_custom_labels (
       user_id TEXT NOT NULL,
       item_id TEXT NOT NULL,
@@ -162,6 +176,7 @@ async function initSchema() {
   await migrateQuickItems(client);
   await migrateCommitment(client);
   await migrateCustomItems(client);
+  await migrateGroupInvites(client);
 }
 
 async function migrateCommitment(client) {
@@ -190,6 +205,16 @@ async function migrateCustomItems(client) {
         args: [uuidv4(), spec.name, spec.description, spec.emoji, spec.sort_order, 'custom', 'toggle', 0, 0, 1],
       });
     }
+  }
+}
+
+async function migrateGroupInvites(client) {
+  const groups = await client.execute('SELECT id, user_id FROM sangha_groups');
+  for (const group of groups.rows) {
+    await client.execute(
+      'INSERT OR IGNORE INTO sangha_group_members (group_id, user_id) VALUES (?, ?)',
+      [group.id, group.user_id]
+    );
   }
 }
 

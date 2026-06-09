@@ -6,8 +6,8 @@ export default function FriendRequestsBell({ count, onClick }) {
       type="button"
       onClick={onClick}
       className="relative flex items-center justify-center shrink-0 w-10 h-10 sm:w-11 sm:h-11 overflow-visible rounded-full hover:bg-surface-variant transition-colors"
-      title={hasRequests ? `${count} friend request${count !== 1 ? 's' : ''}` : 'Friend requests'}
-      aria-label={hasRequests ? `${count} pending friend requests` : 'Friend requests'}
+      title={hasRequests ? `${count} pending invitation${count !== 1 ? 's' : ''}` : 'Pending invitations'}
+      aria-label={hasRequests ? `${count} pending friend or sangha invitations` : 'Pending invitations'}
     >
       <span
         className="material-symbols-outlined text-[24px] leading-none"

@@ -12,6 +12,7 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
   const { user } = useAuth();
   const [team, setTeam] = useState(null);
   const [groups, setGroups] = useState([]);
+  const [groupInvites, setGroupInvites] = useState({ incoming: [], outgoing: [] });
   const [requests, setRequests] = useState({ incoming: [], outgoing: [] });
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -46,6 +47,13 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
       setGroups([]);
     }
 
+    try {
+      const inviteData = await api.getGroupInvitations();
+      setGroupInvites(inviteData);
+    } catch {
+      setGroupInvites({ incoming: [], outgoing: [] });
+    }
+
     setError(teamError);
     setLoading(false);
     onRequestsChange?.();
@@ -71,6 +79,31 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
       await api.declineFriendRequest(requestId);
       const requestData = await api.getFriendRequests();
       setRequests(requestData);
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleAcceptGroupInvite = async (invitationId) => {
+    setActionId(invitationId);
+    try {
+      await api.acceptGroupInvitation(invitationId);
+      await fetchAll();
+    } catch (err) {
+      setError(err.message);
+    } finally {
+      setActionId(null);
+    }
+  };
+
+  const handleDeclineGroupInvite = async (invitationId) => {
+    setActionId(invitationId);
+    try {
+      await api.declineGroupInvitation(invitationId);
+      const inviteData = await api.getGroupInvitations();
+      setGroupInvites(inviteData);
     } catch (err) {
       setError(err.message);
     } finally {
@@ -104,9 +137,12 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
 
   const members = team?.members || [];
   const friends = members.filter(m => m.id !== user?.id);
+  const friendIds = new Set(friends.map(m => m.id));
   const incoming = requests.incoming || [];
   const outgoing = requests.outgoing || [];
-  const pendingCount = incoming.length + outgoing.length;
+  const groupIncoming = groupInvites.incoming || [];
+  const groupOutgoing = groupInvites.outgoing || [];
+  const pendingCount = incoming.length + outgoing.length + groupIncoming.length;
 
   return (
     <div className="space-y-10">
@@ -140,12 +176,13 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
                 >
                   {groupMembers.length === 0 ? (
                     <p className="font-body-md text-body-md text-on-surface-variant">
-                      No one in this group yet. Add members from Manage Sanghas below.
+                      No members yet.{group.is_admin ? ' Invite people from Manage Sanghas below.' : ''}
                     </p>
                   ) : (
                     <MemberGrid
                       members={groupMembers}
                       user={user}
+                      friendIds={friendIds}
                       actionId={actionId}
                       onRemove={handleRemoveFriend}
                     />
@@ -177,6 +214,46 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
           <p className="font-label-sm text-label-sm text-secondary mb-4">
             Could not load requests: {requestsError}
           </p>
+        )}
+
+        {groupIncoming.length > 0 && (
+          <div className="mb-6">
+            <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">
+              Sangha invitations
+            </p>
+            <ul className="space-y-3">
+              {groupIncoming.map(inv => (
+                <li key={inv.id} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
+                  <div className="min-w-0">
+                    <p className="font-body-md text-body-md text-primary truncate">
+                      Join &ldquo;{inv.group_name}&rdquo;
+                    </p>
+                    <p className="font-label-sm text-label-sm text-on-surface-variant truncate">
+                      Invited by {inv.inviter_name}
+                    </p>
+                  </div>
+                  <div className="flex gap-2 shrink-0">
+                    <button
+                      type="button"
+                      disabled={actionId === inv.id}
+                      onClick={() => handleAcceptGroupInvite(inv.id)}
+                      className="flex-1 sm:flex-none border-2 border-primary bg-primary text-on-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50"
+                    >
+                      Join
+                    </button>
+                    <button
+                      type="button"
+                      disabled={actionId === inv.id}
+                      onClick={() => handleDeclineGroupInvite(inv.id)}
+                      className="flex-1 sm:flex-none border-2 border-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-surface-variant transition-colors disabled:opacity-50"
+                    >
+                      Decline
+                    </button>
+                  </div>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
 
         {incoming.length > 0 && (
@@ -216,7 +293,7 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
         )}
 
         {outgoing.length > 0 && (
-          <div className={incoming.length > 0 ? 'mb-4' : ''}>
+          <div className={incoming.length > 0 || groupIncoming.length > 0 ? 'mb-4' : ''}>
             <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">
               Sent by you
             </p>
@@ -226,6 +303,28 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
                   <div className="min-w-0">
                     <p className="font-body-md text-body-md text-primary truncate">{r.name}</p>
                     <p className="font-label-sm text-label-sm text-on-surface-variant truncate">{r.email}</p>
+                  </div>
+                  <span className="font-label-sm text-label-sm uppercase text-on-surface-variant border-2 border-outline-variant px-3 py-1.5 shrink-0">
+                    Pending
+                  </span>
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {groupOutgoing.length > 0 && (
+          <div className={incoming.length > 0 || outgoing.length > 0 || groupIncoming.length > 0 ? 'mb-4' : ''}>
+            <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-3">
+              Sangha invites sent
+            </p>
+            <ul className="space-y-3">
+              {groupOutgoing.map(inv => (
+                <li key={inv.id} className="flex items-center justify-between gap-3 border-2 border-primary p-3 bg-surface-bright">
+                  <div className="min-w-0">
+                    <p className="font-body-md text-body-md text-primary truncate">
+                      &ldquo;{inv.group_name}&rdquo; → {inv.invitee_name}
+                    </p>
                   </div>
                   <span className="font-label-sm text-label-sm uppercase text-on-surface-variant border-2 border-outline-variant px-3 py-1.5 shrink-0">
                     Pending
@@ -246,7 +345,7 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
   );
 }
 
-function MemberGrid({ members, user, actionId, onRemove }) {
+function MemberGrid({ members, user, friendIds, actionId, onRemove }) {
   return (
     <div className="grid md:grid-cols-2 gap-8">
       {members.map(m => (
@@ -254,6 +353,7 @@ function MemberGrid({ members, user, actionId, onRemove }) {
           key={m.id}
           member={m}
           isSelf={m.id === user?.id}
+          isFriend={friendIds.has(m.id)}
           removing={actionId === m.id}
           onRemove={onRemove}
         />
@@ -287,8 +387,8 @@ function SanghaGroupsManager({ groups, members, actionId, setActionId, onChange 
   return (
     <div className="space-y-6">
       <p className="font-body-md text-body-md text-on-surface-variant">
-        Organize your sangha into circles — boyz, girlz, house, or any group you like.
-        Someone can belong to more than one group.
+        Create a shared sangha and invite people. When they accept, everyone sees the same group.
+        Only you (the admin) can invite or delete the sangha.
       </p>
 
       <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-3">
@@ -324,6 +424,7 @@ function SanghaGroupsManager({ groups, members, actionId, setActionId, onChange 
               key={group.id}
               group={group}
               members={members}
+              user={user}
               actionId={actionId}
               setActionId={setActionId}
               onChange={onChange}
@@ -336,9 +437,10 @@ function SanghaGroupsManager({ groups, members, actionId, setActionId, onChange 
   );
 }
 
-function GroupEditor({ group, members, actionId, setActionId, onChange, setGroupError }) {
+function GroupEditor({ group, members, user, actionId, setActionId, onChange, setGroupError }) {
   const [name, setName] = useState(group.name);
-  const [addUserId, setAddUserId] = useState('');
+  const [inviteUserId, setInviteUserId] = useState('');
+  const isAdmin = group.is_admin;
 
   useEffect(() => {
     setName(group.name);
@@ -348,9 +450,15 @@ function GroupEditor({ group, members, actionId, setActionId, onChange, setGroup
   const groupMembers = group.member_ids
     .map(id => memberById[id])
     .filter(Boolean);
-  const availableToAdd = members.filter(m => !group.member_ids.includes(m.id));
+  const pendingInviteIds = new Set((group.pending_invites || []).map(i => i.user_id));
+  const availableToInvite = members.filter(m =>
+    m.id !== user?.id &&
+    !group.member_ids.includes(m.id) &&
+    !pendingInviteIds.has(m.id)
+  );
 
   const handleRename = async () => {
+    if (!isAdmin) return;
     const trimmed = name.trim();
     if (!trimmed || trimmed === group.name) {
       setName(group.name);
@@ -370,7 +478,8 @@ function GroupEditor({ group, members, actionId, setActionId, onChange, setGroup
   };
 
   const handleDelete = async () => {
-    if (!window.confirm(`Delete group "${group.name}"? Members stay in your sangha.`)) return;
+    if (!isAdmin) return;
+    if (!window.confirm(`Delete sangha "${group.name}"? This removes it for everyone.`)) return;
     setGroupError('');
     setActionId(`delete-${group.id}`);
     try {
@@ -383,14 +492,14 @@ function GroupEditor({ group, members, actionId, setActionId, onChange, setGroup
     }
   };
 
-  const handleAddMember = async (e) => {
+  const handleInvite = async (e) => {
     e.preventDefault();
-    if (!addUserId) return;
+    if (!inviteUserId || !isAdmin) return;
     setGroupError('');
-    setActionId(`add-${group.id}-${addUserId}`);
+    setActionId(`invite-${group.id}-${inviteUserId}`);
     try {
-      await api.addGroupMember(group.id, addUserId);
-      setAddUserId('');
+      await api.inviteToGroup(group.id, inviteUserId);
+      setInviteUserId('');
       await onChange();
     } catch (err) {
       setGroupError(err.message);
@@ -400,6 +509,7 @@ function GroupEditor({ group, members, actionId, setActionId, onChange, setGroup
   };
 
   const handleRemoveMember = async (userId) => {
+    if (!isAdmin) return;
     setGroupError('');
     setActionId(`remove-${group.id}-${userId}`);
     try {
@@ -412,46 +522,59 @@ function GroupEditor({ group, members, actionId, setActionId, onChange, setGroup
     }
   };
 
-  const busy = actionId?.startsWith(`rename-${group.id}`)
-    || actionId?.startsWith(`delete-${group.id}`)
-    || actionId?.includes(group.id);
+  const busy = actionId?.includes(group.id);
 
   return (
     <CollapsibleSection title={group.name} badge={groupMembers.length}>
       <div className="space-y-4">
-        <div className="flex flex-col sm:flex-row gap-3">
-          <input
-            type="text"
-            value={name}
-            onChange={(e) => setName(e.target.value)}
-            onBlur={handleRename}
-            maxLength={40}
-            disabled={busy}
-            className="flex-1 border-2 border-primary bg-surface-bright px-4 py-2 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
-          />
-          <button
-            type="button"
-            onClick={handleDelete}
-            disabled={busy}
-            className="border-2 border-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-secondary hover:text-on-secondary hover:border-secondary transition-colors disabled:opacity-50 shrink-0"
-          >
-            Delete Group
-          </button>
-        </div>
+        {!isAdmin && (
+          <p className="font-label-sm text-label-sm text-on-surface-variant">
+            You are a member of this sangha. Only the admin can invite or manage it.
+          </p>
+        )}
+
+        {isAdmin && (
+          <div className="flex flex-col sm:flex-row gap-3">
+            <input
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              onBlur={handleRename}
+              maxLength={40}
+              disabled={busy}
+              className="flex-1 border-2 border-primary bg-surface-bright px-4 py-2 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
+            />
+            <button
+              type="button"
+              onClick={handleDelete}
+              disabled={busy}
+              className="border-2 border-primary px-4 py-2 font-label-sm text-label-sm uppercase hover:bg-secondary hover:text-on-secondary hover:border-secondary transition-colors disabled:opacity-50 shrink-0"
+            >
+              Delete Sangha
+            </button>
+          </div>
+        )}
 
         {groupMembers.length > 0 ? (
           <ul className="divide-y-2 divide-primary border-2 border-primary">
             {groupMembers.map(m => (
               <li key={m.id} className="flex items-center justify-between gap-3 p-3 bg-surface-bright">
-                <span className="font-body-md text-body-md text-primary truncate">{m.name}</span>
-                <button
-                  type="button"
-                  disabled={busy}
-                  onClick={() => handleRemoveMember(m.id)}
-                  className="font-label-sm text-label-sm uppercase border-2 border-primary px-3 py-1 hover:bg-surface-variant transition-colors disabled:opacity-50 shrink-0"
-                >
-                  Remove
-                </button>
+                <span className="font-body-md text-body-md text-primary truncate">
+                  {m.name}
+                  {m.id === group.admin_id && (
+                    <span className="font-label-sm text-label-sm text-on-surface-variant normal-case ml-2">(admin)</span>
+                  )}
+                </span>
+                {isAdmin && m.id !== group.admin_id && (
+                  <button
+                    type="button"
+                    disabled={busy}
+                    onClick={() => handleRemoveMember(m.id)}
+                    className="font-label-sm text-label-sm uppercase border-2 border-primary px-3 py-1 hover:bg-surface-variant transition-colors disabled:opacity-50 shrink-0"
+                  >
+                    Remove
+                  </button>
+                )}
               </li>
             ))}
           </ul>
@@ -459,32 +582,47 @@ function GroupEditor({ group, members, actionId, setActionId, onChange, setGroup
           <p className="font-label-sm text-label-sm text-on-surface-variant">No members yet.</p>
         )}
 
-        {availableToAdd.length > 0 ? (
-          <form onSubmit={handleAddMember} className="flex flex-col sm:flex-row gap-3">
+        {(group.pending_invites || []).length > 0 && isAdmin && (
+          <div>
+            <p className="font-label-sm text-label-sm uppercase text-on-surface-variant mb-2">Pending invites</p>
+            <ul className="space-y-2">
+              {(group.pending_invites || []).map(inv => (
+                <li key={inv.id} className="font-body-md text-body-md text-on-surface-variant border-2 border-outline-variant px-3 py-2">
+                  {memberById[inv.user_id]?.name || 'Invited member'} — waiting
+                </li>
+              ))}
+            </ul>
+          </div>
+        )}
+
+        {isAdmin && availableToInvite.length > 0 ? (
+          <form onSubmit={handleInvite} className="flex flex-col sm:flex-row gap-3">
             <select
-              value={addUserId}
-              onChange={(e) => setAddUserId(e.target.value)}
+              value={inviteUserId}
+              onChange={(e) => setInviteUserId(e.target.value)}
               disabled={busy}
               className="flex-1 border-2 border-primary bg-surface-bright px-4 py-3 font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-secondary"
             >
-              <option value="">Add sangha member…</option>
-              {availableToAdd.map(m => (
+              <option value="">Invite sangha member…</option>
+              {availableToInvite.map(m => (
                 <option key={m.id} value={m.id}>{m.name}</option>
               ))}
             </select>
             <button
               type="submit"
-              disabled={busy || !addUserId}
+              disabled={busy || !inviteUserId}
               className="border-2 border-primary bg-primary text-on-primary px-6 py-3 font-label-sm text-label-sm uppercase hover:bg-secondary hover:border-secondary transition-colors disabled:opacity-50 shrink-0"
             >
-              Add
+              Invite
             </button>
           </form>
-        ) : (
+        ) : isAdmin ? (
           <p className="font-label-sm text-label-sm text-on-surface-variant">
-            All sangha members are already in this group.
+            {availableToInvite.length === 0 && groupMembers.length <= 1
+              ? 'Add friends to your sangha first, then invite them here.'
+              : 'All eligible members have been invited or joined.'}
           </p>
-        )}
+        ) : null}
       </div>
     </CollapsibleSection>
   );
@@ -525,7 +663,7 @@ function CollapsibleSection({ title, badge, defaultOpen = false, onOpen, childre
   );
 }
 
-function MemberCard({ member, isSelf, removing, onRemove }) {
+function MemberCard({ member, isSelf, isFriend, removing, onRemove }) {
   const [optionalOpen, setOptionalOpen] = useState(false);
   const progress = getMemberMotivationalDisplay(member);
   const pillarRows = getMemberPillarRows(member);
@@ -627,7 +765,7 @@ function MemberCard({ member, isSelf, removing, onRemove }) {
         </div>
       )}
 
-      {!isSelf && (
+      {!isSelf && isFriend && (
         <button
           type="button"
           disabled={removing}
