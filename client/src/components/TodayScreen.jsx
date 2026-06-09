@@ -9,6 +9,7 @@ import {
 import { getAkySessionLevel, getAkySessionMeta } from '../utils/akyCompletion';
 import { getDayPillars } from '../utils/dayCompletion';
 import { scheduleDaySnapshot } from '../utils/daySnapshot';
+import { syncLocalPillarsToServer } from '../utils/syncLocalProgress';
 import SanghaNudgePanel from './SanghaNudgePanel';
 import ReceivedNudgesBanner from './ReceivedNudgesBanner';
 import SessionErrorPanel from './SessionErrorPanel';
@@ -41,7 +42,8 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
     setLoading(true);
     try {
       const todayData = await api.getToday();
-      setChecklist(todayData.checklist);
+      const syncedChecklist = await syncLocalPillarsToServer(todayData.checklist, todayData.date);
+      setChecklist(syncedChecklist);
       setDate(todayData.date);
       setError('');
     } catch (err) {
@@ -206,7 +208,7 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
               ))}
             </div>
             {dayComplete && user?.id && (
-              <SanghaNudgePanel userId={user.id} />
+              <SanghaNudgePanel userId={user.id} date={date} />
             )}
           </div>
         </div>
@@ -286,19 +288,23 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
               completed={exerciseItem.completed}
               onGoalChange={async (goalMet) => {
                 bumpPillars();
-                if (goalMet !== exerciseItem.completed) {
-                  setChecklist(prev => prev.map(i =>
+                setChecklist(prev => {
+                  const current = prev.find(i => i.id === exerciseItem.id);
+                  if (!current || current.completed === goalMet) return prev;
+                  (async () => {
+                    try {
+                      await api.toggleItem(exerciseItem.id);
+                    } catch {
+                      setChecklist(p => p.map(i =>
+                        i.id === exerciseItem.id ? { ...i, completed: !goalMet } : i
+                      ));
+                      bumpPillars();
+                    }
+                  })();
+                  return prev.map(i =>
                     i.id === exerciseItem.id ? { ...i, completed: goalMet } : i
-                  ));
-                  try {
-                    await api.toggleItem(exerciseItem.id);
-                  } catch {
-                    setChecklist(prev => prev.map(i =>
-                      i.id === exerciseItem.id ? { ...i, completed: !goalMet } : i
-                    ));
-                    bumpPillars();
-                  }
-                }
+                  );
+                });
               }}
             />
           )}
