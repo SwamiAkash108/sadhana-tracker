@@ -167,7 +167,7 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
         ) : (
           <div className="space-y-4">
             {groups.map(group => {
-              const groupMembers = members.filter(m => group.member_ids.includes(m.id));
+              const groupMembers = members.filter(m => (group.member_ids || []).includes(m.id));
               return (
                 <CollapsibleSection
                   key={group.id}
@@ -198,6 +198,7 @@ export default function TeamScreen({ focusPendingRequests = false, onPendingRequ
         <SanghaGroupsManager
           groups={groups}
           members={members}
+          user={user}
           actionId={actionId}
           setActionId={setActionId}
           onChange={fetchAll}
@@ -362,7 +363,7 @@ function MemberGrid({ members, user, friendIds, actionId, onRemove }) {
   );
 }
 
-function SanghaGroupsManager({ groups, members, actionId, setActionId, onChange }) {
+function SanghaGroupsManager({ groups, members, user, actionId, setActionId, onChange }) {
   const [newGroupName, setNewGroupName] = useState('');
   const [groupError, setGroupError] = useState('');
   const [creating, setCreating] = useState(false);
@@ -447,13 +448,14 @@ function GroupEditor({ group, members, user, actionId, setActionId, onChange, se
   }, [group.name]);
 
   const memberById = Object.fromEntries(members.map(m => [m.id, m]));
-  const groupMembers = group.member_ids
+  const memberIds = group.member_ids || [];
+  const groupMembers = memberIds
     .map(id => memberById[id])
     .filter(Boolean);
   const pendingInviteIds = new Set((group.pending_invites || []).map(i => i.user_id));
   const availableToInvite = members.filter(m =>
     m.id !== user?.id &&
-    !group.member_ids.includes(m.id) &&
+    !memberIds.includes(m.id) &&
     !pendingInviteIds.has(m.id)
   );
 
