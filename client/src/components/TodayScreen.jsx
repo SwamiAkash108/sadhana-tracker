@@ -10,6 +10,7 @@ import { getAkySessionLevel, getAkySessionMeta } from '../utils/akyCompletion';
 import { getDayPillars } from '../utils/dayCompletion';
 import { scheduleDaySnapshot } from '../utils/daySnapshot';
 import { syncLocalPillarsToServer } from '../utils/syncLocalProgress';
+import { hydrateDayState, pullDayStateFromServer, flushDayStateSave } from '../utils/dayStateSync';
 import SanghaNudgePanel from './SanghaNudgePanel';
 import ReceivedNudgesBanner from './ReceivedNudgesBanner';
 import SessionErrorPanel from './SessionErrorPanel';
@@ -26,8 +27,6 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
   const [customLabelError, setCustomLabelError] = useState('');
   const [savingCustomLabel, setSavingCustomLabel] = useState(false);
   const japaRef = useRef(null);
-  const checklistRef = useRef(checklist);
-  checklistRef.current = checklist;
   const bumpPillars = () => setPillarTick(t => t + 1);
 
   useEffect(() => {
@@ -44,9 +43,13 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
     setLoading(true);
     try {
       const todayData = await api.getToday();
-      const syncedChecklist = await syncLocalPillarsToServer(todayData.checklist, todayData.date);
+      hydrateDayState(todayData.date, todayData.dayState);
+      await flushDayStateSave(todayData.date);
+      const refreshed = await api.getToday();
+      hydrateDayState(refreshed.date, refreshed.dayState);
+      const syncedChecklist = await syncLocalPillarsToServer(refreshed.checklist, refreshed.date);
       setChecklist(syncedChecklist);
-      setDate(todayData.date);
+      setDate(refreshed.date);
       setError('');
     } catch (err) {
       setError(err.message);
@@ -68,9 +71,15 @@ const TodayScreen = forwardRef(function TodayScreen({ user, onOpenAky }, ref) {
 
     const resync = async () => {
       if (document.visibilityState !== 'visible') return;
-      const synced = await syncLocalPillarsToServer(checklistRef.current, date);
-      setChecklist(synced);
-      bumpPillars();
+      await pullDayStateFromServer(date);
+      try {
+        const refreshed = await api.getToday();
+        hydrateDayState(refreshed.date, refreshed.dayState);
+        setChecklist(refreshed.checklist);
+        bumpPillars();
+      } catch {
+        bumpPillars();
+      }
     };
 
     document.addEventListener('visibilitychange', resync);

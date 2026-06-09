@@ -1,6 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { api } from '../api';
 import { scheduleDaySnapshot } from '../utils/daySnapshot';
+import { hydrateDayState, flushDayStateSave } from '../utils/dayStateSync';
 import SessionErrorPanel from './SessionErrorPanel';
 import {
   getCounter, setCounter, getDoneSessions, markDoneSession,
@@ -50,8 +51,12 @@ export default function AkyScreen({ onClose }) {
     setLoading(true);
     try {
       const data = await api.getToday();
-      setItems(data.checklist.filter(i => isAkyCategory(i.category) || isKriyaLevelItem(i)));
-      setDate(data.date);
+      hydrateDayState(data.date, data.dayState);
+      await flushDayStateSave(data.date);
+      const refreshed = await api.getToday();
+      hydrateDayState(refreshed.date, refreshed.dayState);
+      setItems(refreshed.checklist.filter(i => isAkyCategory(i.category) || isKriyaLevelItem(i)));
+      setDate(refreshed.date);
       setError('');
     } catch (err) {
       setError(err.message);

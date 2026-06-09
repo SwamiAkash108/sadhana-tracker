@@ -1,3 +1,10 @@
+import {
+  getDayState,
+  updateDayState,
+  normalizeWaterState,
+  getAllActivityDatesFromCache,
+} from './dayStateSync';
+
 const COUNTER_KEY = 'sadhana_counters';
 const DONE_SESSIONS_KEY = 'sadhana_done_sessions';
 const JAPA_KEY = 'sadhana_japa_timer';
@@ -17,10 +24,6 @@ function readStore(key) {
   } catch {
     return {};
   }
-}
-
-function writeStore(key, data) {
-  localStorage.setItem(key, JSON.stringify(data));
 }
 
 export function isAkyCategory(category) {
@@ -68,29 +71,32 @@ export function getCounterMaxDisplay(item) {
 }
 
 export function getCounter(date, itemId) {
-  return readStore(COUNTER_KEY)[`${date}:${itemId}`] ?? 0;
+  return getDayState(date).counters[itemId] ?? 0;
 }
 
 export function setCounter(date, itemId, value, item) {
-  const store = readStore(COUNTER_KEY);
   const max = item ? getCounterMax(item) : Infinity;
-  store[`${date}:${itemId}`] = Math.max(0, Math.min(max, value));
-  writeStore(COUNTER_KEY, store);
-  return store[`${date}:${itemId}`];
+  const next = Math.max(0, Math.min(max, value));
+  updateDayState(date, state => ({
+    ...state,
+    counters: { ...state.counters, [itemId]: next },
+  }));
+  return next;
 }
 
 export function getDoneSessions(date, itemId) {
-  return readStore(DONE_SESSIONS_KEY)[`${date}:${itemId}`] ?? 0;
+  return getDayState(date).doneSessions[itemId] ?? 0;
 }
 
 export function markDoneSession(date, itemId, maxSessions) {
-  const store = readStore(DONE_SESSIONS_KEY);
-  const key = `${date}:${itemId}`;
-  const current = store[key] ?? 0;
+  const current = getDoneSessions(date, itemId);
   if (current >= maxSessions) return current;
-  store[key] = current + 1;
-  writeStore(DONE_SESSIONS_KEY, store);
-  return store[key];
+  const next = current + 1;
+  updateDayState(date, state => ({
+    ...state,
+    doneSessions: { ...state.doneSessions, [itemId]: next },
+  }));
+  return next;
 }
 
 export function isItemPracticedToday(date, itemId) {
@@ -98,13 +104,15 @@ export function isItemPracticedToday(date, itemId) {
 }
 
 export function getJapaState(date) {
-  const store = readStore(JAPA_KEY);
-  if (store.date !== date) return { elapsed: 0, running: false };
-  return { elapsed: store.elapsed ?? 0, running: !!store.running };
+  const { japa } = getDayState(date);
+  return { elapsed: japa.elapsed ?? 0, running: !!japa.running };
 }
 
 export function setJapaState(date, elapsed, running) {
-  writeStore(JAPA_KEY, { date, elapsed, running: !!running });
+  updateDayState(date, state => ({
+    ...state,
+    japa: { elapsed: Math.max(0, elapsed), running: !!running },
+  }));
 }
 
 function emptyWaterState() {
@@ -114,28 +122,8 @@ function emptyWaterState() {
   };
 }
 
-function normalizeWaterState(saved) {
-  if (Array.isArray(saved)) {
-    const glasses = saved.length === WATER_GLASS_COUNT
-      ? saved
-      : Array(WATER_GLASS_COUNT).fill(false);
-    return { glasses, bottles: Array(WATER_BOTTLE_COUNT).fill(false) };
-  }
-  if (saved && Array.isArray(saved.glasses)) {
-    const glasses = saved.glasses.length === WATER_GLASS_COUNT
-      ? saved.glasses
-      : Array(WATER_GLASS_COUNT).fill(false);
-    const bottles = Array.isArray(saved.bottles) && saved.bottles.length === WATER_BOTTLE_COUNT
-      ? saved.bottles
-      : Array(WATER_BOTTLE_COUNT).fill(false);
-    return { glasses, bottles };
-  }
-  return emptyWaterState();
-}
-
 export function getWaterState(date) {
-  const store = readStore(WATER_KEY);
-  return normalizeWaterState(store[date]);
+  return normalizeWaterState(getDayState(date).water);
 }
 
 export function getWaterGlasses(date) {
@@ -143,10 +131,8 @@ export function getWaterGlasses(date) {
 }
 
 export function setWaterState(date, state) {
-  const store = readStore(WATER_KEY);
-  store[date] = state;
-  writeStore(WATER_KEY, store);
-  return state;
+  updateDayState(date, s => ({ ...s, water: normalizeWaterState(state) }));
+  return normalizeWaterState(state);
 }
 
 export function setWaterGlasses(date, glasses) {
@@ -177,9 +163,6 @@ export function getWaterMl(stateOrGlasses) {
 }
 
 export function isWaterGoalMet(stateOrGlasses) {
-  if (Array.isArray(stateOrGlasses)) {
-    return getWaterMl(stateOrGlasses) >= WATER_GOAL_ML;
-  }
   return getWaterMl(stateOrGlasses) >= WATER_GOAL_ML;
 }
 
@@ -199,26 +182,25 @@ function defaultExerciseState() {
 }
 
 export function getExerciseState(date) {
-  const store = readStore(EXERCISE_KEY);
-  const saved = store[date];
-  if (!saved) return defaultExerciseState();
+  const exercise = getDayState(date).exercise || defaultExerciseState();
   return {
-    elapsed: saved.elapsed ?? 0,
-    running: !!saved.running,
-    pushups: normalizePushupCount(saved.pushups),
+    elapsed: exercise.elapsed ?? 0,
+    running: !!exercise.running,
+    pushups: normalizePushupCount(exercise.pushups),
   };
 }
 
 export function setExerciseState(date, elapsed, running, pushups) {
-  const store = readStore(EXERCISE_KEY);
   const current = getExerciseState(date);
-  store[date] = {
-    elapsed: Math.max(0, elapsed),
-    running: !!running,
-    pushups: pushups !== undefined ? normalizePushupCount(pushups) : current.pushups,
-  };
-  writeStore(EXERCISE_KEY, store);
-  return store[date];
+  updateDayState(date, state => ({
+    ...state,
+    exercise: {
+      elapsed: Math.max(0, elapsed),
+      running: !!running,
+      pushups: pushups !== undefined ? normalizePushupCount(pushups) : current.pushups,
+    },
+  }));
+  return getExerciseState(date);
 }
 
 export function adjustExerciseElapsed(date, deltaSec) {
@@ -240,13 +222,12 @@ export function isPushupGoalMet(count) {
   return normalizePushupCount(count) >= 1;
 }
 
-/** Collect sadhana dates referenced in local timer/counter storage. */
 function isValidDateStr(s) {
   return /^\d{4}-\d{2}-\d{2}$/.test(s || '');
 }
 
 export function getAllActivityDates() {
-  const dates = new Set();
+  const dates = new Set(getAllActivityDatesFromCache());
 
   const counterStore = readStore(COUNTER_KEY);
   for (const key of Object.keys(counterStore)) {

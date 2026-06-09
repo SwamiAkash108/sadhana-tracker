@@ -59,6 +59,11 @@ export const api = {
     method: 'PUT',
     body: JSON.stringify(snapshot),
   }),
+  getDayState: (date) => request(`/sadhana/day-state/${date}`),
+  saveDayState: (date, state) => request(`/sadhana/day-state/${date}`, {
+    method: 'PUT',
+    body: JSON.stringify({ state }),
+  }),
   getTeam: () => request('/sadhana/team'),
   getUserHistory: (userId, days = 7) => request(`/sadhana/history/${userId}?days=${days}`),
   searchFriends: (q) => request(`/sadhana/friends/search?q=${encodeURIComponent(q)}`),

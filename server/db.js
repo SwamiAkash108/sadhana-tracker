@@ -95,6 +95,14 @@ async function initSchema() {
       PRIMARY KEY (user_id, date),
       FOREIGN KEY (user_id) REFERENCES users(id)
     )`,
+    `CREATE TABLE IF NOT EXISTS user_day_state (
+      user_id TEXT NOT NULL,
+      date TEXT NOT NULL,
+      state TEXT NOT NULL DEFAULT '{}',
+      updated_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, date),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`,
     `CREATE TABLE IF NOT EXISTS sangha_groups (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,

@@ -16,6 +16,116 @@ if (VAPID_PUBLIC && VAPID_PRIVATE) {
 }
 
 const DAY_PILLAR_COUNT = 6;
+const JAPA_GOAL_SEC = 60 * 60;
+const EXERCISE_GOAL_SEC = 10 * 60;
+const WATER_GLASS_ML = 250;
+const WATER_BOTTLE_ML = 750;
+const WATER_GOAL_ML = 2000;
+const WATER_GLASS_COUNT = 8;
+const WATER_BOTTLE_COUNT = 3;
+
+function parseDayStateJson(raw) {
+  if (!raw) return null;
+  try {
+    return typeof raw === 'string' ? JSON.parse(raw) : raw;
+  } catch {
+    return null;
+  }
+}
+
+function emptyWaterState() {
+  return {
+    glasses: Array(WATER_GLASS_COUNT).fill(false),
+    bottles: Array(WATER_BOTTLE_COUNT).fill(false),
+  };
+}
+
+function normalizeWaterState(saved) {
+  if (!saved) return emptyWaterState();
+  if (Array.isArray(saved)) {
+    const glasses = saved.length === WATER_GLASS_COUNT ? saved : Array(WATER_GLASS_COUNT).fill(false);
+    return { glasses, bottles: Array(WATER_BOTTLE_COUNT).fill(false) };
+  }
+  const glasses = Array.isArray(saved.glasses) && saved.glasses.length === WATER_GLASS_COUNT
+    ? saved.glasses
+    : Array(WATER_GLASS_COUNT).fill(false);
+  const bottles = Array.isArray(saved.bottles) && saved.bottles.length === WATER_BOTTLE_COUNT
+    ? saved.bottles
+    : Array(WATER_BOTTLE_COUNT).fill(false);
+  return { glasses, bottles };
+}
+
+function emptyDayState() {
+  return {
+    japa: { elapsed: 0, running: false },
+    exercise: { elapsed: 0, running: false, pushups: 0 },
+    water: emptyWaterState(),
+    counters: {},
+    doneSessions: {},
+  };
+}
+
+function normalizeDayState(state) {
+  const base = emptyDayState();
+  if (!state || typeof state !== 'object') return base;
+  return {
+    japa: { ...base.japa, ...(state.japa || {}) },
+    exercise: {
+      elapsed: Math.max(0, Number(state.exercise?.elapsed) || 0),
+      running: !!state.exercise?.running,
+      pushups: Math.max(0, Number(state.exercise?.pushups) || 0),
+    },
+    water: normalizeWaterState(state.water),
+    counters: { ...base.counters, ...(state.counters || {}) },
+    doneSessions: { ...base.doneSessions, ...(state.doneSessions || {}) },
+  };
+}
+
+function waterGoalMetFromState(water) {
+  const normalized = normalizeWaterState(water);
+  const ml =
+    normalized.glasses.filter(Boolean).length * WATER_GLASS_ML +
+    normalized.bottles.filter(Boolean).length * WATER_BOTTLE_ML;
+  return ml >= WATER_GOAL_ML;
+}
+
+function isAkyItemCategory(category) {
+  const c = (category || '').toLowerCase();
+  return c !== 'japa' && c !== 'quick';
+}
+
+function itemCompleteFromDayState(item, dayState) {
+  if (!item || !dayState) return false;
+  const name = (item.name || '').toLowerCase();
+  const cat = (item.category || '').toLowerCase();
+  const counters = dayState.counters || {};
+  const sessions = dayState.doneSessions || {};
+
+  if (name === 'exercise') {
+    return (dayState.exercise?.elapsed || 0) >= EXERCISE_GOAL_SEC || (dayState.exercise?.pushups || 0) >= 1;
+  }
+  if (name === 'japa') {
+    return (dayState.japa?.elapsed || 0) >= JAPA_GOAL_SEC;
+  }
+  if (name === 'water') {
+    return waterGoalMetFromState(dayState.water);
+  }
+  if (isAkyItemCategory(cat)) {
+    if ((sessions[item.id] || 0) > 0) return true;
+    if ((counters[item.id] || 0) > 0 && (item.item_type || '') === 'counter') return true;
+    if (name === 'main kriya' && (counters[item.id] || 0) >= 1) return true;
+  }
+  return false;
+}
+
+function mergedCompletedIds(items, completedIds, dayState) {
+  const merged = new Set(completedIds);
+  if (!dayState) return merged;
+  for (const item of items) {
+    if (itemCompleteFromDayState(item, dayState)) merged.add(item.id);
+  }
+  return merged;
+}
 
 function computeAkyLevelFromServer(items, completedIds) {
   const isDone = (name) => items.some(
@@ -73,7 +183,65 @@ async function sendPushToUser(db, userId, payload) {
   return sent;
 }
 
-function buildMemberProgress(user, items, totalItems, completedIds, customLabelsForUser = {}) {
+function computeAkyLevelMerged(items, completedIds, dayState) {
+  const merged = mergedCompletedIds(items, completedIds, dayState);
+  return computeAkyLevelFromServer(items, merged);
+}
+
+function computeDayPillarsMerged(items, completedIds, dayState) {
+  const merged = mergedCompletedIds(items, completedIds, dayState);
+  return computeDayPillarsFromServer(items, merged);
+}
+
+async function getDayStateForUser(db, userId, date) {
+  const result = await db.execute(
+    'SELECT state FROM user_day_state WHERE user_id = ? AND date = ?',
+    [userId, date]
+  );
+  if (!result.rows[0]) return emptyDayState();
+  return normalizeDayState(parseDayStateJson(result.rows[0].state));
+}
+
+async function getDayStatesForUsers(db, userIds, date) {
+  if (userIds.length === 0) return {};
+  const placeholders = userIds.map(() => '?').join(', ');
+  const result = await db.execute(
+    `SELECT user_id, state FROM user_day_state WHERE date = ? AND user_id IN (${placeholders})`,
+    [date, ...userIds]
+  );
+  const map = {};
+  for (const row of result.rows) {
+    map[row.user_id] = normalizeDayState(parseDayStateJson(row.state));
+  }
+  return map;
+}
+
+async function saveDayStateForUser(db, userId, date, state) {
+  const normalized = normalizeDayState(state);
+  await db.execute(
+    `INSERT INTO user_day_state (user_id, date, state, updated_at)
+     VALUES (?, ?, ?, datetime('now'))
+     ON CONFLICT(user_id, date) DO UPDATE SET
+       state = excluded.state,
+       updated_at = excluded.updated_at`,
+    [userId, date, JSON.stringify(normalized)]
+  );
+  return normalized;
+}
+
+async function syncProgressFromDayState(db, userId, date, items, dayState) {
+  if (!dayState) return;
+  for (const item of items) {
+    if (!itemCompleteFromDayState(item, dayState)) continue;
+    await db.execute(
+      `INSERT OR IGNORE INTO daily_progress (id, user_id, item_id, date, completed) VALUES (?, ?, ?, ?, 1)`,
+      [uuidv4(), userId, item.id, date]
+    );
+  }
+}
+
+function buildMemberProgress(user, items, totalItems, completedIds, customLabelsForUser = {}, dayState = null) {
+  const merged = mergedCompletedIds(items, completedIds, dayState);
   const completed = completedIds.size;
   const itemStatus = items.map(item => ({
     id: item.id,
@@ -81,21 +249,21 @@ function buildMemberProgress(user, items, totalItems, completedIds, customLabels
       ? (customLabelsForUser[item.id] || 'Custom')
       : item.name,
     category: item.category,
-    completed: completedIds.has(item.id),
+    completed: merged.has(item.id),
   }));
   const akyItems = items.filter(i => !['japa', 'quick'].includes((i.category || '').toLowerCase()));
-  const akyDone = akyItems.filter(i => completedIds.has(i.id)).length;
-  const japaDone = items.some(i => (i.category || '').toLowerCase() === 'japa' && completedIds.has(i.id));
+  const akyDone = akyItems.filter(i => merged.has(i.id)).length;
+  const japaDone = items.some(i => (i.category || '').toLowerCase() === 'japa' && merged.has(i.id));
   const quickItems = items.filter(i => (i.category || '').toLowerCase() === 'quick');
-  const quickDone = quickItems.filter(i => completedIds.has(i.id)).length;
-  const dayPillars = computeDayPillarsFromServer(items, completedIds);
-  const akyLevel = computeAkyLevelFromServer(items, completedIds);
+  const quickDone = quickItems.filter(i => merged.has(i.id)).length;
+  const dayPillars = computeDayPillarsMerged(items, completedIds, dayState);
+  const akyLevel = computeAkyLevelMerged(items, completedIds, dayState);
 
   return {
     ...user,
-    completed,
+    completed: merged.size,
     total: totalItems,
-    percentage: totalItems > 0 ? Math.round((completed / totalItems) * 100) : 0,
+    percentage: totalItems > 0 ? Math.round((merged.size / totalItems) * 100) : 0,
     items: itemStatus,
     akyDone,
     akyTotal: akyItems.length,
@@ -200,7 +368,14 @@ router.get('/today', async (req, res) => {
       completed: completedIds.has(item.id),
     }));
 
-    res.json({ date: today, checklist, summary: { total: items.length, done: completedIds.size, remaining: items.length - completedIds.size } });
+    const dayState = await getDayStateForUser(db, req.userId, today);
+
+    res.json({
+      date: today,
+      checklist,
+      dayState,
+      summary: { total: items.length, done: completedIds.size, remaining: items.length - completedIds.size },
+    });
   } catch (err) {
     console.error('Today error:', err);
     res.status(500).json({ error: 'Failed to fetch today data.' });
@@ -550,6 +725,40 @@ router.put('/snapshots/:date', async (req, res) => {
   } catch (err) {
     console.error('Snapshot save error:', err);
     res.status(500).json({ error: 'Failed to save practice history.' });
+  }
+});
+
+// GET /api/sadhana/day-state/:date
+router.get('/day-state/:date', async (req, res) => {
+  try {
+    const db = getDb();
+    const dayState = await getDayStateForUser(db, req.userId, req.params.date);
+    res.json({ date: req.params.date, dayState });
+  } catch (err) {
+    console.error('Day state fetch error:', err);
+    res.status(500).json({ error: 'Failed to fetch day state.' });
+  }
+});
+
+// PUT /api/sadhana/day-state/:date { state }
+router.put('/day-state/:date', async (req, res) => {
+  try {
+    const db = getDb();
+    const { date } = req.params;
+    const { state } = req.body;
+    if (!date || !state || typeof state !== 'object') {
+      return res.status(400).json({ error: 'Valid date and state body required.' });
+    }
+
+    const itemsResult = await db.execute('SELECT id, name, category, item_type FROM sadhana_items WHERE active = 1');
+    const items = itemsResult.rows;
+    const saved = await saveDayStateForUser(db, req.userId, date, state);
+    await syncProgressFromDayState(db, req.userId, date, items, saved);
+
+    res.json({ saved: true, date, dayState: saved });
+  } catch (err) {
+    console.error('Day state save error:', err);
+    res.status(500).json({ error: 'Failed to save day state.' });
   }
 });
 
@@ -1195,10 +1404,18 @@ router.get('/team', async (req, res) => {
     }
 
     const customLabelsByUser = await getCustomLabelsForUsers(db, memberIds);
+    const dayStatesByUser = await getDayStatesForUsers(db, memberIds, today);
 
     const teamData = users.map(user => {
       const completedIds = progressByUser[user.id] || new Set();
-      return buildMemberProgress(user, items, totalItems, completedIds, customLabelsByUser[user.id] || {});
+      return buildMemberProgress(
+        user,
+        items,
+        totalItems,
+        completedIds,
+        customLabelsByUser[user.id] || {},
+        dayStatesByUser[user.id] || null
+      );
     });
 
     res.json({ date: today, totalItems, members: teamData });
