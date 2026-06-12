@@ -93,4 +93,9 @@ export const api = {
   unsubscribe: () => request('/notifications/unsubscribe', { method: 'POST' }),
   sendTestNotification: () => request('/notifications/test', { method: 'POST' }),
   sendReminder: () => request('/notifications/send-reminder', { method: 'POST' }),
+
+  getStreakFreezes: () => request('/sadhana/streak-freezes'),
+  requestStreakHelp: () => request('/sadhana/streak-freezes/help-request', { method: 'POST' }),
+  acceptStreakHelp: (requestId) => request(`/sadhana/streak-freezes/help-requests/${requestId}/accept`, { method: 'POST' }),
+  declineStreakHelp: (requestId) => request(`/sadhana/streak-freezes/help-requests/${requestId}/decline`, { method: 'POST' }),
 };

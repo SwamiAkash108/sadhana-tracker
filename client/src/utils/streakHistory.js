@@ -24,7 +24,8 @@ export function isStreakDay(status) {
   return status === 'orange' || status === 'green';
 }
 
-export function computeCurrentStreak(statusByDate, today = getSadhanaDate(), windowDays = 30) {
+export function computeCurrentStreak(statusByDate, today = getSadhanaDate(), windowDays = 30, frozenDates = []) {
+  const frozen = frozenDates instanceof Set ? frozenDates : new Set(frozenDates);
   const dates = getRecentDates(windowDays, today);
   let streak = 0;
 
@@ -32,6 +33,8 @@ export function computeCurrentStreak(statusByDate, today = getSadhanaDate(), win
     const date = dates[i];
     if (isStreakDay(statusByDate[date])) {
       streak++;
+    } else if (frozen.has(date)) {
+      continue;
     } else if (date !== today) {
       break;
     }

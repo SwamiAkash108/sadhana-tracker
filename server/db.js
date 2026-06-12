@@ -185,6 +185,7 @@ async function initSchema() {
   await migrateCommitment(client);
   await migrateCustomItems(client);
   await migrateGroupInvites(client);
+  await migrateStreakFreezes(client);
 }
 
 async function migrateCommitment(client) {
@@ -224,6 +225,51 @@ async function migrateGroupInvites(client) {
       [group.id, group.user_id]
     );
   }
+}
+
+async function migrateStreakFreezes(client) {
+  try {
+    await client.execute('ALTER TABLE users ADD COLUMN streak_freeze_count INTEGER DEFAULT 2');
+  } catch {
+    /* exists */
+  }
+  try {
+    await client.execute('ALTER TABLE users ADD COLUMN streak_freeze_milestone INTEGER DEFAULT 0');
+  } catch {
+    /* exists */
+  }
+
+  await client.execute(
+    `CREATE TABLE IF NOT EXISTS streak_freeze_uses (
+      user_id TEXT NOT NULL,
+      protected_date TEXT NOT NULL,
+      created_at TEXT DEFAULT (datetime('now')),
+      PRIMARY KEY (user_id, protected_date),
+      FOREIGN KEY (user_id) REFERENCES users(id)
+    )`
+  );
+
+  await client.execute(
+    `CREATE TABLE IF NOT EXISTS streak_freeze_help_requests (
+      id TEXT PRIMARY KEY,
+      requester_id TEXT NOT NULL,
+      helper_id TEXT,
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at TEXT DEFAULT (datetime('now')),
+      updated_at TEXT DEFAULT (datetime('now')),
+      FOREIGN KEY (requester_id) REFERENCES users(id),
+      FOREIGN KEY (helper_id) REFERENCES users(id)
+    )`
+  );
+
+  await client.execute(
+    'CREATE INDEX IF NOT EXISTS idx_streak_help_requester ON streak_freeze_help_requests(requester_id, status)'
+  );
+
+  await client.execute(
+    `UPDATE users SET streak_freeze_count = 2
+     WHERE streak_freeze_count IS NULL OR streak_freeze_count < 0`
+  );
 }
 
 async function migrateQuickItems(client) {

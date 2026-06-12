@@ -11,6 +11,7 @@ import {
 } from '../utils/streakHistory';
 import { DayHistoryCard } from './DayHistoryPanel';
 import SessionErrorPanel from './SessionErrorPanel';
+import StreakFreezePanel from './StreakFreezePanel';
 
 export default function ProgressScreen() {
   const [loading, setLoading] = useState(true);
@@ -23,6 +24,7 @@ export default function ProgressScreen() {
   const [selectedDate, setSelectedDate] = useState(null);
   const [items, setItems] = useState([]);
   const [progressByDate, setProgressByDate] = useState({});
+  const [freezeData, setFreezeData] = useState(null);
 
   const now = new Date();
   const year = now.getFullYear();
@@ -33,14 +35,18 @@ export default function ProgressScreen() {
   const fetchData = useCallback(async () => {
     setLoading(true);
     try {
-      const [{ items: itemList }, { progress }, { snapshots }] = await Promise.all([
+      const [{ items: itemList }, { progress }, { snapshots }, freezeInfo] = await Promise.all([
         api.getItems(),
         api.getProgressRange(),
         api.getDaySnapshots(),
+        api.getStreakFreezes(),
       ]);
 
       const statusByDate = buildStatusByDate(itemList, progress);
-      const streak = computeCurrentStreak(statusByDate, sadhanaToday);
+      const frozenSet = new Set(freezeInfo.frozenDates || []);
+      const streak = typeof freezeInfo.currentStreak === 'number'
+        ? freezeInfo.currentStreak
+        : computeCurrentStreak(statusByDate, sadhanaToday, 90, frozenSet);
       const { longest, endDate } = computeLongestStreak(statusByDate, sadhanaToday);
       const dayHistory = buildHistoryFromSources(itemList, progress, snapshots);
 
@@ -51,6 +57,7 @@ export default function ProgressScreen() {
       setLongestStreakEndDate(endDate);
       setMonthDays(getMonthDayStatuses(statusByDate, year, month));
       setHistory(dayHistory);
+      setFreezeData(freezeInfo);
       setSelectedDate(prev => prev || sadhanaToday);
       setError('');
     } catch (err) {
@@ -87,6 +94,7 @@ export default function ProgressScreen() {
   }
 
   const dayMap = Object.fromEntries(monthDays.map(day => [day.date, day]));
+  const frozenSet = new Set(freezeData?.frozenDates || []);
   const longestEnd = longestStreakEndDate
     ? new Date(longestStreakEndDate + 'T00:00:00').toLocaleDateString('en-US', { month: 'short', year: 'numeric' })
     : '';
@@ -129,6 +137,8 @@ export default function ProgressScreen() {
             </p>
           </div>
 
+          <StreakFreezePanel freezeData={freezeData} onRefresh={fetchData} />
+
           <div className="bg-surface-bright thin-border woodcut-shadow p-6 relative">
             <div className="absolute inset-0 halftone-bg opacity-5 mix-blend-multiply pointer-events-none" />
             <h3 className="font-label-sm text-label-sm uppercase tracking-widest text-on-surface-variant mb-4 border-b border-outline pb-2">
@@ -152,6 +162,7 @@ export default function ProgressScreen() {
                 <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 bg-[#15803d]" /> Full</div>
                 <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 bg-[#ea580c]" /> Partial</div>
                 <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 border border-primary bg-surface" /> Miss</div>
+                <div className="flex items-center gap-1"><div className="w-3 h-3 md:w-4 md:h-4 bg-[#bae6fd]" /> Frozen</div>
               </div>
             </div>
 
@@ -166,6 +177,7 @@ export default function ProgressScreen() {
                 const dayNum = Number(ds.split('-')[2]);
                 const day = dayMap[ds];
                 const status = day?.status || 'none';
+                const isFrozen = frozenSet.has(ds);
                 const isToday = ds === sadhanaToday;
                 const isFuture = ds > sadhanaToday;
                 const isSelected = ds === selectedDate;
@@ -173,6 +185,7 @@ export default function ProgressScreen() {
                 let cellClass = 'bg-surface thin-border flex items-center justify-center text-primary';
                 if (status === 'green') cellClass = 'bg-[#15803d] thin-border flex items-center justify-center text-white';
                 else if (status === 'orange') cellClass = 'bg-[#ea580c] thin-border flex items-center justify-center text-white';
+                else if (isFrozen) cellClass = 'bg-[#bae6fd] thin-border flex items-center justify-center text-[#0284c7]';
                 if (isFuture) cellClass += ' opacity-50';
                 if (isSelected) cellClass += ' ring-2 ring-black ring-offset-1';
 
@@ -186,6 +199,9 @@ export default function ProgressScreen() {
                     title="View this day's practice"
                   >
                     {dayNum}
+                    {isFrozen && status === 'none' && (
+                      <span className="material-symbols-outlined text-xs absolute top-0.5 right-0.5 opacity-80" aria-hidden="true">ac_unit</span>
+                    )}
                     {status === 'orange' && (
                       <div className="absolute inset-0 halftone-bg opacity-30 mix-blend-overlay pointer-events-none" />
                     )}

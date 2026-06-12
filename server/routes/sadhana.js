@@ -3,6 +3,20 @@ const webpush = require('web-push');
 const { v4: uuidv4 } = require('uuid');
 const { getDb, getSadhanaDate } = require('../db');
 const { authMiddleware } = require('./auth');
+const {
+  MAX_STREAK_FREEZES,
+  FREEZE_EARN_EVERY_DAYS,
+  addDays,
+  computeStreakWithFreezes,
+  daysUntilNextFreeze,
+  getUserFreezeRow,
+  getFrozenDates,
+  awardFreezesForStreak,
+  tryAutoFreezeYesterday,
+  applyFreezeForDate,
+  isStreakDayStatus,
+  setUserFreezeCount,
+} = require('../streakFreezeLogic');
 
 const router = express.Router();
 router.use(authMiddleware);
@@ -1617,6 +1631,258 @@ router.post('/nudge-all', async (req, res) => {
   } catch (err) {
     console.error('Nudge-all error:', err);
     res.status(500).json({ error: 'Failed to nudge sangha.' });
+  }
+});
+
+function dayStatusFromMergedProgress(items, completedIds, dayState) {
+  const pillars = computeDayPillarsMerged(items, completedIds, dayState);
+  if (!pillars.complete) return 'none';
+  const akyLevel = computeAkyLevelMerged(items, completedIds, dayState);
+  return akyLevel === 'green' ? 'green' : 'orange';
+}
+
+async function buildUserStatusByDate(db, userId, today) {
+  const from = addDays(today, -120);
+  const itemsResult = await db.execute(
+    'SELECT id, name, category, item_type FROM sadhana_items WHERE active = 1'
+  );
+  const items = itemsResult.rows;
+
+  const progressResult = await db.execute(
+    'SELECT date, item_id FROM daily_progress WHERE user_id = ? AND date >= ? AND date <= ?',
+    [userId, from, today]
+  );
+  const progressByDate = {};
+  for (const row of progressResult.rows) {
+    if (!progressByDate[row.date]) progressByDate[row.date] = new Set();
+    progressByDate[row.date].add(row.item_id);
+  }
+
+  const dates = Object.keys(progressByDate);
+  const userDayStates = {};
+  const stateResult = await db.execute(
+    'SELECT date, state FROM user_day_state WHERE user_id = ? AND date >= ? AND date <= ?',
+    [userId, from, today]
+  );
+  for (const row of stateResult.rows) {
+    userDayStates[row.date] = normalizeDayState(parseDayStateJson(row.state));
+  }
+
+  const statusByDate = {};
+  const allDates = new Set([...dates, ...Object.keys(userDayStates), today]);
+  for (const date of allDates) {
+    const completedIds = progressByDate[date] || new Set();
+    statusByDate[date] = dayStatusFromMergedProgress(
+      items,
+      completedIds,
+      userDayStates[date] || null
+    );
+  }
+
+  return statusByDate;
+}
+
+// GET /api/sadhana/streak-freezes — sync, balance, streak, help requests
+router.get('/streak-freezes', async (req, res) => {
+  try {
+    const db = getDb();
+    const today = getSadhanaDate();
+    const statusByDate = await buildUserStatusByDate(db, req.userId, today);
+
+    const autoApplied = await tryAutoFreezeYesterday(db, req.userId, statusByDate, today);
+    const frozenDates = await getFrozenDates(db, req.userId);
+    const frozenSet = new Set(frozenDates);
+
+    let streak = computeStreakWithFreezes(statusByDate, frozenSet, today);
+    let { count, milestone } = await getUserFreezeRow(db, req.userId);
+
+    if (isStreakDayStatus(statusByDate[today])) {
+      const award = await awardFreezesForStreak(db, req.userId, streak);
+      count = award.count;
+      milestone = award.milestone;
+    }
+
+    const incomingResult = await db.execute(
+      `SELECT hr.id, hr.requester_id, hr.created_at, u.name as requester_name
+       FROM streak_freeze_help_requests hr
+       JOIN users u ON u.id = hr.requester_id
+       WHERE hr.status = 'pending'
+       AND hr.requester_id != ?
+       AND EXISTS (
+         SELECT 1 FROM friend_requests fr
+         WHERE fr.status = 'accepted'
+         AND (
+           (fr.requester_id = ? AND fr.recipient_id = hr.requester_id)
+           OR (fr.recipient_id = ? AND fr.requester_id = hr.requester_id)
+         )
+       )
+       ORDER BY hr.created_at DESC`,
+      [req.userId, req.userId, req.userId]
+    );
+
+    const outgoingResult = await db.execute(
+      `SELECT id, created_at FROM streak_freeze_help_requests
+       WHERE requester_id = ? AND status = 'pending'
+       ORDER BY created_at DESC LIMIT 1`,
+      [req.userId]
+    );
+
+    res.json({
+      balance: count,
+      max: MAX_STREAK_FREEZES,
+      frozenDates,
+      autoApplied,
+      currentStreak: streak,
+      daysUntilNextFreeze: daysUntilNextFreeze(streak),
+      earnEvery: FREEZE_EARN_EVERY_DAYS,
+      incomingHelp: incomingResult.rows,
+      outgoingHelp: outgoingResult.rows[0] || null,
+    });
+  } catch (err) {
+    console.error('Streak freezes fetch error:', err);
+    res.status(500).json({ error: 'Failed to load streak freezes.' });
+  }
+});
+
+// POST /api/sadhana/streak-freezes/help-request
+router.post('/streak-freezes/help-request', async (req, res) => {
+  try {
+    const db = getDb();
+    const { count } = await getUserFreezeRow(db, req.userId);
+    if (count > 0) {
+      return res.status(400).json({ error: 'You still have streak freezes available.' });
+    }
+
+    const pending = await db.execute(
+      `SELECT id FROM streak_freeze_help_requests WHERE requester_id = ? AND status = 'pending'`,
+      [req.userId]
+    );
+    if (pending.rows[0]) {
+      return res.status(409).json({ error: 'You already have a pending help request.' });
+    }
+
+    const friendIds = await getFriendIds(db, req.userId);
+    if (friendIds.length === 0) {
+      return res.status(400).json({ error: 'Add sangha friends before requesting help.' });
+    }
+
+    const id = uuidv4();
+    await db.execute(
+      `INSERT INTO streak_freeze_help_requests (id, requester_id, status) VALUES (?, ?, 'pending')`,
+      [id, req.userId]
+    );
+
+    const requesterName = (await db.execute('SELECT name FROM users WHERE id = ?', [req.userId])).rows[0]?.name || 'A sangha friend';
+    for (const friendId of friendIds) {
+      await sendPushToUser(db, friendId, {
+        title: '❄️ Streak freeze needed',
+        body: `${requesterName} is out of streak freezes and needs your help.`,
+        icon: '/icons/icon-192.png',
+        badge: '/icons/icon-72.png',
+        data: { url: '/' },
+        tag: 'streak-freeze-help',
+        requireInteraction: false,
+      });
+    }
+
+    res.json({ id, status: 'pending' });
+  } catch (err) {
+    console.error('Streak help request error:', err);
+    res.status(500).json({ error: 'Failed to request help.' });
+  }
+});
+
+// POST /api/sadhana/streak-freezes/help-requests/:id/accept
+router.post('/streak-freezes/help-requests/:id/accept', async (req, res) => {
+  try {
+    const db = getDb();
+    const requestId = req.params.id;
+
+    const result = await db.execute(
+      `SELECT id, requester_id, status FROM streak_freeze_help_requests WHERE id = ?`,
+      [requestId]
+    );
+    const row = result.rows[0];
+    if (!row || row.status !== 'pending') {
+      return res.status(404).json({ error: 'Help request not found.' });
+    }
+    if (row.requester_id === req.userId) {
+      return res.status(400).json({ error: 'You cannot accept your own request.' });
+    }
+
+    const friendIds = await getFriendIds(db, req.userId);
+    if (!friendIds.includes(row.requester_id)) {
+      return res.status(403).json({ error: 'Only sangha friends can help.' });
+    }
+
+    const helper = await getUserFreezeRow(db, req.userId);
+    if (helper.count <= 0) {
+      return res.status(400).json({ error: 'You need at least one streak freeze to share.' });
+    }
+
+    const requester = await getUserFreezeRow(db, row.requester_id);
+    if (requester.count >= MAX_STREAK_FREEZES) {
+      return res.status(400).json({ error: 'Their freeze bank is already full.' });
+    }
+
+    await setUserFreezeCount(db, req.userId, helper.count - 1, helper.milestone);
+    await setUserFreezeCount(db, row.requester_id, requester.count + 1, requester.milestone);
+
+    await db.execute(
+      `UPDATE streak_freeze_help_requests
+       SET status = 'accepted', helper_id = ?, updated_at = datetime('now')
+       WHERE id = ?`,
+      [req.userId, requestId]
+    );
+
+    const helperName = (await db.execute('SELECT name FROM users WHERE id = ?', [req.userId])).rows[0]?.name || 'A friend';
+
+    await sendPushToUser(db, row.requester_id, {
+      title: '❄️ Streak freeze received',
+      body: `${helperName} shared a streak freeze with you.`,
+      icon: '/icons/icon-192.png',
+      badge: '/icons/icon-72.png',
+      data: { url: '/' },
+      tag: 'streak-freeze-gift',
+      requireInteraction: false,
+    });
+
+    res.json({ status: 'accepted' });
+  } catch (err) {
+    console.error('Streak help accept error:', err);
+    res.status(500).json({ error: 'Failed to send streak freeze.' });
+  }
+});
+
+// POST /api/sadhana/streak-freezes/help-requests/:id/decline
+router.post('/streak-freezes/help-requests/:id/decline', async (req, res) => {
+  try {
+    const db = getDb();
+    const requestId = req.params.id;
+
+    const result = await db.execute(
+      `SELECT id, requester_id, status FROM streak_freeze_help_requests WHERE id = ?`,
+      [requestId]
+    );
+    const row = result.rows[0];
+    if (!row || row.status !== 'pending') {
+      return res.status(404).json({ error: 'Help request not found.' });
+    }
+
+    const friendIds = await getFriendIds(db, req.userId);
+    if (row.requester_id !== req.userId && !friendIds.includes(row.requester_id)) {
+      return res.status(403).json({ error: 'Not allowed.' });
+    }
+
+    await db.execute(
+      `UPDATE streak_freeze_help_requests SET status = 'declined', updated_at = datetime('now') WHERE id = ?`,
+      [requestId]
+    );
+
+    res.json({ status: 'declined' });
+  } catch (err) {
+    console.error('Streak help decline error:', err);
+    res.status(500).json({ error: 'Failed to decline request.' });
   }
 });
 
